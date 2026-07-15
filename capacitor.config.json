@@ -1,0 +1,13 @@
+{
+  "appId": "com.inventorypro.app",
+  "appName": "Inventory Pro",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "280437482334-google-client-id-here.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    }
+  }
+}

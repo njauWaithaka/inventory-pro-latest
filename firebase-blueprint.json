@@ -1,0 +1,269 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile data",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "companyId": { "type": "string" },
+        "hasConfigured": { "type": "boolean" }
+      },
+      "required": ["email"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Company meta-data",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "plan": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "currency": { "type": "string" },
+        "timezone": { "type": "string" }
+      },
+      "required": ["name", "ownerId"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "Company membership relation",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["owner", "manager", "staff", "caretaker"] },
+        "permissions": { "type": "array", "items": { "type": "string" } },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Inventory product item",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "warehouseId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "value": { "type": "number" },
+        "movement": { "type": "string", "enum": ["fast", "moderate", "slow", "obsolete"] },
+        "status": { "type": "string" },
+        "lastSold": { "type": "string" },
+        "image": { "type": "string" },
+        "expiryDate": { "type": "string" },
+        "uom": { "type": "string" },
+        "materialGroup": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "sku", "quantity", "value"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Warehouse": {
+      "title": "Warehouse",
+      "description": "Storage location",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "capacity": { "type": "number" }
+      },
+      "required": ["name"]
+    },
+    "InventoryAlert": {
+      "title": "Inventory Alert",
+      "description": "System alert for inventory levels",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["reorder", "expiry", "slow", "overstock"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+        "productId": { "type": "string" }
+      },
+      "required": ["type", "title", "timestamp", "severity"]
+    },
+    "PurchaseOrder": {
+      "title": "Purchase Order",
+      "description": "Order placed with a supplier",
+      "type": "object",
+      "properties": {
+        "poNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["DRAFT", "PENDING", "APPROVED", "SHIPPED", "RECEIVED", "CANCELLED"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "quantity": { "type": "number" },
+              "unitPrice": { "type": "number" },
+              "receivedQuantity": { "type": "number" }
+            },
+            "required": ["productId", "quantity", "unitPrice"]
+          }
+        },
+        "notes": { "type": "string" }
+      },
+      "required": ["poNumber", "supplierId", "date", "status", "items"]
+    },
+    "GoodReceiptNote": {
+      "title": "Good Receipt Note",
+      "description": "Record of goods received against a PO",
+      "type": "object",
+      "properties": {
+        "grnNumber": { "type": "string" },
+        "poId": { "type": "string" },
+        "receivedDate": { "type": "string", "format": "date-time" },
+        "receivedBy": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "orderedQuantity": { "type": "number" },
+              "receivedQuantity": { "type": "number" }
+            },
+            "required": ["productId", "receivedQuantity"]
+          }
+        },
+        "notes": { "type": "string" }
+      },
+      "required": ["grnNumber", "poId", "receivedDate", "items"]
+    },
+    "MROIssue": {
+      "title": "MRO Issue",
+      "description": "Maintenance, Repair, and Operations stock issue",
+      "type": "object",
+      "properties": {
+        "issueNumber": { "type": "string" },
+        "productId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "issuedTo": { "type": "string" },
+        "department": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      },
+      "required": ["issueNumber", "productId", "quantity", "issuedTo", "date"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Sales invoice for a customer",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "customer": { "type": "string" },
+        "date": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["paid", "pending", "overdue", "draft", "proforma"] },
+        "type": { "type": "string", "enum": ["standard", "proforma"] },
+        "items": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "originalProforma": { "type": "string" },
+        "isConverted": { "type": "boolean" },
+        "convertedTo": { "type": "string" },
+        "source_type": { "type": "string", "enum": ["quotation", "proforma", "direct"] },
+        "source_id": { "type": "string" },
+        "converted_date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["date", "amount", "status"]
+    },
+    "Quotation": {
+      "title": "Quotation",
+      "description": "Sales quotation for a customer",
+      "type": "object",
+      "properties": {
+        "customer": { "type": "string" },
+        "date": { "type": "string" },
+        "expiryDate": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "sent", "accepted", "expired", "converted"] },
+        "items": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "convertedTo": { "type": "string" },
+        "converted_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customer", "date", "amount", "status"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Vendor or supplier details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "payable": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["name", "email"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "balance": { "type": "number" }
+      },
+      "required": ["name", "email"]
+    },
+    "StockMovement": {
+      "title": "Stock Movement",
+      "description": "Record of stock change",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "type": { "type": "string", "enum": ["purchase", "sale", "adjustment", "transfer"] },
+        "quantity": { "type": "number" },
+        "beforeQty": { "type": "number" },
+        "afterQty": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["productId", "type", "quantity", "createdAt", "createdBy"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles" },
+    "/companies/{companyId}": { "schema": "Company", "description": "Company settings" },
+    "/companies/{companyId}/members/{userId}": { "schema": "Member", "description": "Company membership" },
+    "/companies/{companyId}/products": { "schema": "Product", "description": "Company inventory" },
+    "/companies/{companyId}/categories": { "schema": "Category", "description": "Product categories" },
+    "/companies/{companyId}/warehouses": { "schema": "Warehouse", "description": "Warehouses" },
+    "/companies/{companyId}/suppliers": { "schema": "Supplier", "description": "Suppliers" },
+    "/companies/{companyId}/customers": { "schema": "Customer", "description": "Customers" },
+    "/companies/{companyId}/purchaseOrders": { "schema": "PurchaseOrder", "description": "Purchase orders" },
+    "/companies/{companyId}/grns": { "schema": "GoodReceiptNote", "description": "Good receipt notes" },
+    "/companies/{companyId}/mroIssues": { "schema": "MROIssue", "description": "MRO stock issues" },
+    "/companies/{companyId}/invoices": { "schema": "Invoice", "description": "Sales invoices" },
+    "/companies/{companyId}/quotations": { "schema": "Quotation", "description": "Sales quotations" },
+    "/companies/{companyId}/alerts": { "schema": "InventoryAlert", "description": "Inventory alerts" },
+    "/companies/{companyId}/stockMovements": { "schema": "StockMovement", "description": "Stock history" }
+  }
+}
