@@ -127,7 +127,7 @@ const menuGroups = [
     children: [
       { id: "customers" as ViewType, label: "Customers", icon: UserRound },
       {
-        id: "suppliers_contact" as ViewType,
+        id: "suppliers" as ViewType,
         label: "Suppliers",
         icon: Building,
       },
@@ -219,7 +219,8 @@ export function Sidebar({
   isCollapsed,
   onToggleCollapse,
 }: SidebarProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const [activeAlertsCount, setActiveAlertsCount] = React.useState(0);
   const [isLargeScreen, setIsLargeScreen] = React.useState(false);
   const [expandedSections, setExpandedSections] = React.useState<
     Record<string, boolean>
@@ -230,6 +231,21 @@ export function Sidebar({
     contacts: false,
     insights: false,
   });
+
+  React.useEffect(() => {
+    if (!profile?.companyId) return;
+
+    const path = `companies/${profile.companyId}/inventory_alerts`;
+    const unsubscribe = onSnapshot(collection(db, path), (snapshot) => {
+      const active = snapshot.docs.filter((doc) => {
+        const data = doc.data();
+        return data.status !== "resolved" && data.status !== "dismissed";
+      });
+      setActiveAlertsCount(active.length);
+    });
+
+    return () => unsubscribe();
+  }, [profile?.companyId]);
 
   const toggleSection = (section: string) => {
     if (isCollapsed) {
@@ -374,17 +390,23 @@ export function Sidebar({
             {/* Collapsed Group Icons */}
             {isCollapsed ? (
               <div className="space-y-1">
-                {menuGroups.map((group) => (
-                  <NavButton
-                    key={group.id}
-                    item={group}
-                    isCollapsed={true}
-                    isActive={group.children.some(
-                      (child) => child.id === currentView,
-                    )}
-                    onClick={() => toggleSection(group.id)}
-                  />
-                ))}
+                {menuGroups.map((group) => {
+                  const hasAlertsInGroup = group.id === "insights" && activeAlertsCount > 0;
+                  const groupWithBadge = hasAlertsInGroup
+                    ? { ...group, badge: activeAlertsCount.toString() }
+                    : group;
+                  return (
+                    <NavButton
+                      key={group.id}
+                      item={groupWithBadge}
+                      isCollapsed={true}
+                      isActive={group.children.some(
+                        (child) => child.id === currentView,
+                      )}
+                      onClick={() => toggleSection(group.id)}
+                    />
+                  );
+                })}
               </div>
             ) : (
               <div className="space-y-6">
@@ -407,16 +429,21 @@ export function Sidebar({
                     </button>
                     {expandedSections[group.id] && (
                       <div className="w-full space-y-1">
-                        {group.children.map((child) => (
-                          <NavButton
-                            key={child.id}
-                            item={child}
-                            isSub={true}
-                            isCollapsed={false}
-                            isActive={currentView === child.id}
-                            onClick={() => handleNavClick(child.id)}
-                          />
-                        ))}
+                        {group.children.map((child) => {
+                          const itemWithBadge = child.id === "alerts"
+                            ? { ...child, badge: activeAlertsCount > 0 ? activeAlertsCount.toString() : undefined }
+                            : child;
+                          return (
+                            <NavButton
+                              key={child.id}
+                              item={itemWithBadge}
+                              isSub={true}
+                              isCollapsed={false}
+                              isActive={currentView === child.id}
+                              onClick={() => handleNavClick(child.id)}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -454,31 +481,18 @@ export function Sidebar({
 export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { user, profile, logout } = useAuth();
   const title = user?.displayName || user?.email?.split("@")[0] || "User";
-  const [expiryAlertCount, setExpiryAlertCount] = useState(0);
+  const [activeAlertCount, setActiveAlertCount] = useState(0);
 
   useEffect(() => {
     if (!profile?.companyId) return;
 
-    const path = `companies/${profile.companyId}/products`;
+    const path = `companies/${profile.companyId}/inventory_alerts`;
     const unsubscribe = onSnapshot(collection(db, path), (snapshot) => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      let count = 0;
-
-      snapshot.docs.forEach((doc) => {
-        const item = doc.data() as Product;
-        if (item.expiryDate) {
-          const exp = new Date(item.expiryDate);
-          exp.setHours(0, 0, 0, 0);
-          const diffDays = Math.ceil(
-            (exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-          );
-          if (diffDays <= 14) {
-            count++;
-          }
-        }
+      const active = snapshot.docs.filter((doc) => {
+        const data = doc.data();
+        return data.status !== "resolved" && data.status !== "dismissed";
       });
-      setExpiryAlertCount(count);
+      setActiveAlertCount(active.length);
     });
 
     return () => unsubscribe();
@@ -509,11 +523,11 @@ export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
           <button className="p-2.5 text-slate-500 hover:bg-slate-100 hover:text-blue-600 rounded-full relative transition-all duration-300 transform group-hover:scale-105 group-active:scale-95">
             <Bell className="w-5 h-5 transition-transform duration-300" />
 
-            {expiryAlertCount > 0 && (
+            {activeAlertCount > 0 && (
               <span className="absolute top-2 right-2 flex h-4 w-4">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                 <span className="relative inline-flex items-center justify-center rounded-full h-4 w-4 bg-rose-500 text-[9px] font-black text-white shadow-sm ring-2 ring-white overflow-hidden">
-                  {expiryAlertCount}
+                  {activeAlertCount}
                 </span>
               </span>
             )}

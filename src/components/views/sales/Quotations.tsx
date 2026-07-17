@@ -7,7 +7,7 @@ import {
   Activity, Layers, Waves, Droplets, Plug, Sun, Sprout,
   Building, CreditCard, ShieldCheck, Truck, Sparkles, MapPin, Phone, Mail, Award
 } from 'lucide-react';
-import { collection, onSnapshot, query, setDoc, doc, updateDoc, getDocs, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, setDoc, doc, updateDoc, getDocs, orderBy, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { handleFirestoreError, OperationType } from '../../../lib/firestoreUtils';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -98,6 +98,7 @@ export function Quotations() {
   const [isNewQuotationOpen, setIsNewQuotationOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   
   // Selected quotation for viewing/printing
   const [selectedQuotation, setSelectedQuotation] = useState<any | null>(null);
@@ -156,6 +157,11 @@ export function Quotations() {
       const q = collection(db, `companies/${profile.companyId}/products`);
       getDocs(q).then(snapshot => {
         setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+
+      const custQ = collection(db, `companies/${profile.companyId}/customers`);
+      getDocs(custQ).then(snapshot => {
+        setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
 
       // Pre-fill fields with user/company context
@@ -332,18 +338,50 @@ export function Quotations() {
 
   const convertToInvoice = async (quotation: any, type: 'standard' | 'proforma') => {
     if (!user || !profile?.companyId) return;
+    
+    // Prevent duplicate conversions unless explicitly allowed
+    if (quotation.status === 'converted' || quotation.convertedTo) {
+      const allowMultiple = window.confirm(
+        `This quotation (${quotation.id}) has already been converted to invoice ${quotation.convertedTo || ''}.\n\nDo you want to explicitly allow converting it again?`
+      );
+      if (!allowMultiple) return;
+    }
+
     setIsSubmitting(true);
     
     try {
       const prefix = type === 'standard' ? 'INV' : 'PRO';
       const invoiceId = `${prefix}-${Date.now().toString().slice(-6)}`;
       
+      // Determine default payment and invoice status
+      let invoiceStatus = type === 'standard' ? 'pending' : 'proforma';
+      let paymentStatus = 'unpaid';
+
+      // Ask user to confirm payment immediately if standard invoice
+      if (type === 'standard') {
+        const confirmPayment = window.confirm(
+          `Quotation ${quotation.id} is being converted to Invoice ${invoiceId}.\n\nHas payment been confirmed? Click OK to automatically mark the invoice as Paid, or Cancel to leave it as Unpaid (Pending).`
+        );
+        if (confirmPayment) {
+          invoiceStatus = 'paid';
+          paymentStatus = 'paid';
+        }
+      }
+
       const invoiceData = {
         id: invoiceId,
         customer: quotation.customer,
+        customerAccountNo: quotation.customerAccountNo || '',
+        customerAddress: quotation.customerAddress || '',
+        subject: quotation.subject || '',
+        salesperson: quotation.salesperson || '',
         amount: quotation.amount,
-        status: type === 'standard' ? 'pending' : 'proforma',
-        type: type,
+        subtotal: quotation.subtotal || quotation.amount,
+        vatAmount: quotation.vatAmount || 0,
+        discountAmount: quotation.discountAmount || 0,
+        status: invoiceStatus,
+        paymentStatus: paymentStatus,
+        type: type === 'standard' ? 'standard' : 'proforma',
         date: new Date().toISOString().split('T')[0],
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         items: quotation.items.map((it: any) => ({
@@ -351,23 +389,164 @@ export function Quotations() {
           name: it.name,
           quantity: it.quantity,
           price: it.price,
-          sku: it.sku || ''
+          sku: it.sku || '',
+          vatRate: it.vatRate ?? 16,
+          discount: it.discount || 0,
+          tax: it.tax || 0,
+          total: it.quantity * it.price
         })),
         createdAt: new Date().toISOString(),
         createdBy: user.uid,
         source_type: 'quotation',
-        source_id: quotation.id
+        source_id: quotation.id,
+        sourceQuotationId: quotation.id,
+        sourceQuotationNumber: quotation.id,
+        linkToQuotation: quotation.id,
+
+        // Copy terms & notes
+        deliveryTerms: quotation.deliveryTerms || '',
+        validityTerms: quotation.validityTerms || '',
+        paymentTerms: quotation.paymentTerms || '',
+        warrantyTerms: quotation.warrantyTerms || '',
+        notes: quotation.notes || '',
+        terms: quotation.terms || '',
+
+        // Supplier details
+        supplierStore: quotation.supplierStore || '',
+        supplierPhone: quotation.supplierPhone || '',
+        supplierEmail: quotation.supplierEmail || '',
+        supplierKraPin: quotation.supplierKraPin || '',
+
+        // Bank details
+        bankAccountName: quotation.bankAccountName || '',
+        bankName: quotation.bankName || '',
+        bankBranch: quotation.bankBranch || '',
+        bankCurrency: quotation.bankCurrency || '',
+        bankAccountNo: quotation.bankAccountNo || '',
+        bankCode: quotation.bankCode || ''
       };
 
+      // 1. Create Invoice
       await setDoc(doc(db, `companies/${profile.companyId}/invoices`, invoiceId), invoiceData);
 
+      // 2. Mark Quotation as converted
       await updateDoc(doc(db, `companies/${profile.companyId}/quotations`, quotation.id), {
         status: 'converted',
         convertedTo: invoiceId,
-        converted_at: new Date().toISOString()
+        converted_at: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
 
-      alert(`Successfully converted to ${type} invoice: ${invoiceId}`);
+      // 3. Record conversion audit log
+      const conversionLogId = `log_conv_${Date.now()}`;
+      await setDoc(doc(db, `companies/${profile.companyId}/auditLogs`, conversionLogId), {
+        id: conversionLogId,
+        eventType: 'quotation_converted',
+        action: 'Quotation Converted',
+        details: `Quotation ${quotation.id} converted to ${type} Invoice ${invoiceId}`,
+        userId: user.uid,
+        userEmail: user.email || '',
+        userName: profile.name || user.displayName || 'User',
+        timestamp: new Date().toISOString(),
+        createdAt: serverTimestamp()
+      });
+
+      // Record payment audit log if confirmed
+      if (invoiceStatus === 'paid') {
+        const paymentLogId = `log_pay_${Date.now()}`;
+        await setDoc(doc(db, `companies/${profile.companyId}/auditLogs`, paymentLogId), {
+          id: paymentLogId,
+          eventType: 'invoice_payment_confirmed',
+          action: 'Invoice Payment Confirmed',
+          details: `Payment confirmed for Invoice ${invoiceId} (Converted from Quotation ${quotation.id})`,
+          userId: user.uid,
+          userEmail: user.email || '',
+          userName: profile.name || user.displayName || 'User',
+          timestamp: new Date().toISOString(),
+          createdAt: serverTimestamp()
+        });
+      }
+
+      // 4. Reduce Inventory, Record Sales, and Create Audit logs ONLY if Standard (Real) Invoice
+      if (type === 'standard') {
+        const productsRef = collection(db, `companies/${profile.companyId}/products`);
+        const productsSnap = await getDocs(productsRef);
+        const productsList = productsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+
+        for (const item of quotation.items) {
+          const product = productsList.find(p => p.id === item.productId);
+          const beforeQty = product?.quantity || 0;
+          const finalQty = beforeQty - item.quantity;
+
+          // Update product qty
+          const productRef = doc(db, `companies/${profile.companyId}/products`, item.productId);
+          await updateDoc(productRef, {
+            quantity: finalQty,
+            currentStock: finalQty,
+            unitsSold: increment(item.quantity),
+            updatedAt: new Date().toISOString(),
+            serverUpdatedAt: serverTimestamp()
+          });
+
+          // Record Unified Sale
+          const saleId = `sale_${Date.now()}_${item.productId}`;
+          await setDoc(doc(db, `companies/${profile.companyId}/sales`, saleId), {
+            id: saleId,
+            saleId: saleId,
+            productId: item.productId,
+            productName: item.name || product?.name || "Product",
+            quantitySold: item.quantity,
+            sellingPrice: item.price,
+            totalAmount: item.quantity * item.price,
+            saleDate: new Date().toISOString().split('T')[0],
+            customerId: quotation.customer || "Walk-in Customer",
+            createdAt: new Date().toISOString(),
+            timestamp: serverTimestamp()
+          });
+
+          // Create stockMovement / Audit Log
+          const movementId = `mov_${Date.now()}_${item.productId}`;
+          await setDoc(doc(db, `companies/${profile.companyId}/stockMovements`, movementId), {
+            id: movementId,
+            productId: item.productId,
+            type: 'sale',
+            quantity: item.quantity,
+            beforeQty: beforeQty,
+            afterQty: finalQty,
+            createdAt: new Date().toISOString(),
+            createdBy: user.uid,
+            reference: invoiceId,
+
+            // Audit and Analytical Fields (Target Schema Alignment)
+            transactionId: movementId,
+            transactionType: 'Sale',
+            previousStock: beforeQty,
+            newStock: finalQty,
+            reason: `Converted Quotation Sale - Invoice #${invoiceId}`,
+            userId: user.uid,
+            timestamp: serverTimestamp()
+          });
+        }
+
+        // Generate Delivery Note
+        const deliveryNoteId = `DN-${Date.now()}`;
+        await setDoc(doc(db, `companies/${profile.companyId}/deliveryNotes`, deliveryNoteId), {
+          id: deliveryNoteId,
+          orderId: invoiceId,
+          customer: quotation.customer,
+          date: new Date().toISOString().split('T')[0],
+          status: 'pending',
+          items: quotation.items,
+          createdAt: new Date().toISOString(),
+          createdBy: user.uid
+        });
+      }
+
+      // 5. Trigger dynamic alert synchronization
+      const { AlertService } = await import('../../../lib/alertService');
+      await AlertService.runAlertSync(profile.companyId);
+
+      alert(`Successfully converted to ${type} invoice: ${invoiceId}${invoiceStatus === 'paid' ? ' (Marked as Paid)' : ' (Pending Payment)'}`);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'convert_quotation');
     } finally {
@@ -484,6 +663,38 @@ export function Quotations() {
                           <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
                             <Sparkles className="w-4 h-4 text-blue-500" /> Buyer & Metadata Settings
                           </h4>
+
+                          <div className="bg-slate-100/60 p-4 rounded-xl border border-slate-200/50">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 mb-1 block">
+                              Select Customer Profile (Optional)
+                            </label>
+                            <select
+                              onChange={(e) => {
+                                const selectedCustId = e.target.value;
+                                if (selectedCustId === 'custom') {
+                                  setCustomerName('');
+                                  setCustomerAccountNo('');
+                                  setCustomerAddress('');
+                                } else {
+                                  const cust = customers.find(c => c.id === selectedCustId);
+                                  if (cust) {
+                                    setCustomerName(cust.name);
+                                    setCustomerAccountNo(cust.id?.replace(`${profile?.companyId}_`, '') || cust.id);
+                                    setCustomerAddress(cust.address || 'Kenya');
+                                  }
+                                }
+                              }}
+                              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 transition-all font-bold text-slate-800 text-xs"
+                            >
+                              <option value="custom">-- Create Custom / Walk-in Customer --</option>
+                              {customers.map(c => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name} (Tax PIN: {c.taxPin || 'None'})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 mb-1 block">Customer Name</label>

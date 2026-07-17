@@ -6,13 +6,19 @@ import {
 } from 'recharts';
 import { cn, formatCompactNumber, getSellThroughRate, getProductMovementSpeed } from '../../lib/utils';
 import { 
+  calculateStockTurnover, 
+  calculateMonthlyTurnoverTrend, 
+  getDateRangeForPeriod, 
+  TimePeriod 
+} from '../../lib/stockTurnoverService';
+import { 
   TrendingUp, DollarSign, Package, BarChart3, Calendar, RotateCcw, FileDown, 
   Activity, MousePointer2, Clock, Ban, ChevronDown, CheckCircle2, ShieldCheck, 
   AlertTriangle, RefreshCw, Sparkles, HelpCircle, ArrowRight, UserCheck, Inbox,
   CornerDownRight, Database, ListFilter, AlertCircle
 } from 'lucide-react';
 import { 
-  collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, writeBatch, Timestamp 
+  collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, writeBatch 
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -25,12 +31,22 @@ export function Analytics() {
   const { user } = useAuth();
   const { profile, company, currency } = useSettings();
   const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [stockMovements, setStockMovements] = useState<any[]>([]);
+  const [productsLoaded, setProductsLoaded] = useState(false);
+  const [movementsLoaded, setMovementsLoaded] = useState(false);
+
+  // Filter States
+  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('This Month');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
   useEffect(() => {
     if (!profile?.companyId) return;
-    const q = collection(db, `companies/${profile.companyId}/products`);
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+
+    const prodQuery = collection(db, `companies/${profile.companyId}/products`);
+    const unsubscribeProducts = onSnapshot(prodQuery, (snapshot) => {
       setProducts(snapshot.docs.map(doc => {
         const data = doc.data() as any;
         return {
@@ -39,18 +55,60 @@ export function Analytics() {
           movement: getProductMovementSpeed(data)
         };
       }));
-      setLoading(false);
+      setProductsLoaded(true);
     }, (error) => {
-      console.error("Query error in Analytics:", error);
-      setLoading(false);
+      console.error("Query error in Analytics products:", error);
+      setProductsLoaded(true);
     });
-    return unsubscribe;
+
+    const movQuery = collection(db, `companies/${profile.companyId}/stockMovements`);
+    const unsubscribeMovements = onSnapshot(movQuery, (snapshot) => {
+      setStockMovements(snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })));
+      setMovementsLoaded(true);
+    }, (error) => {
+      console.error("Query error in Analytics movements:", error);
+      setMovementsLoaded(true);
+    });
+
+    return () => {
+      unsubscribeProducts();
+      unsubscribeMovements();
+    };
   }, [profile?.companyId]);
+
+  const loading = !productsLoaded || !movementsLoaded;
+
+  // Custom range memo
+  const customRange = useMemo(() => {
+    if (!customStartDate || !customEndDate) return undefined;
+    return {
+      start: new Date(customStartDate + 'T00:00:00'),
+      end: new Date(customEndDate + 'T23:59:59')
+    };
+  }, [customStartDate, customEndDate]);
+
+  // Date range memo
+  const dateRange = useMemo(() => {
+    return getDateRangeForPeriod(selectedPeriod, customRange);
+  }, [selectedPeriod, customRange]);
+
+  // Overall statistics memo
+  const overallStats = useMemo(() => {
+    return calculateStockTurnover(products, stockMovements, dateRange);
+  }, [products, stockMovements, dateRange]);
+
+  // Turnover Trend (Line Chart) data
+  const turnoverRatioData = useMemo(() => {
+    return calculateMonthlyTurnoverTrend(products, stockMovements);
+  }, [products, stockMovements]);
 
   // Dynamic Metrics Calculation
   const allProducts = [...products];
   
-  const totalCapital = allProducts.reduce((sum, p) => sum + (p.value * p.quantity), 0);
+  const totalCapital = allProducts.reduce((sum, p) => sum + ((p.value || p.buyingPrice || 0) * (p.quantity || 0)), 0);
   const totalSKUs = allProducts.length;
 
   const totalUnitsSold = allProducts.reduce((sum, p) => sum + (p.unitsSold || 0), 0);
@@ -61,34 +119,19 @@ export function Analytics() {
     return sum + received;
   }, 0);
   const averageSTR = totalUnitsReceived > 0 ? (totalUnitsSold / totalUnitsReceived) * 100 : 0;
-  
-  const turnoverRatioData = useMemo(() => {
-    let totalSold = 0;
-    let totalStock = 0;
-    products.forEach(p => {
-      totalSold += parseFloat(p.unitsSold || 0);
-      totalStock += parseFloat(p.quantity || 0);
-    });
-    const ratio = totalStock > 0 ? (totalSold / totalStock) * 3 : 3.5;
-    const months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return months.map((m, idx) => {
-      const variation = Math.sin(idx) * 0.4;
-      return {
-        name: m,
-        turnover: Math.max(0.5, parseFloat((ratio + variation).toFixed(1)))
-      };
-    });
-  }, [products]);
+
+  // Overall/Average Turnover value for the stat card
+  const overallTurnover = overallStats.overallRatio;
   
   const categoryStats = allProducts.reduce((acc: any[], p) => {
     const existing = acc.find(c => c.name === p.category);
-    const val = p.value * p.quantity;
+    const val = (p.value || p.buyingPrice || 0) * (p.quantity || 0);
     if (existing) {
       existing.value += val;
     } else {
       acc.push({ 
         id: acc.length + 1, 
-        name: p.category, 
+        name: p.category || 'Uncategorized', 
         value: val, 
         color: COLORS[acc.length % COLORS.length] 
       });
@@ -96,11 +139,28 @@ export function Analytics() {
     return acc;
   }, []).sort((a, b) => b.value - a.value);
 
+  const categoriesList = useMemo(() => {
+    const list = new Set<string>();
+    products.forEach(p => {
+      if (p.category) list.add(p.category);
+    });
+    return ['All', ...Array.from(list)];
+  }, [products]);
+
+  const filteredProductsStats = useMemo(() => {
+    return overallStats.productsStats.filter(stat => {
+      const matchesSearch = stat.productName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            stat.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = selectedCategory === 'All' || stat.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [overallStats.productsStats, searchQuery, selectedCategory]);
+
   const movementDataMap = allProducts.reduce((acc, p) => {
     let key = p.movement || 'slow';
     
     if (!acc[key]) acc[key] = { value: 0, items: 0 };
-    acc[key].value += p.value * p.quantity;
+    acc[key].value += (p.value || p.buyingPrice || 0) * (p.quantity || 0);
     acc[key].items += p.quantity; // Summing quantities as requested
     return acc;
   }, {} as any);
@@ -163,16 +223,56 @@ export function Analytics() {
           <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Analytics</h2>
           <p className="text-slate-500 text-[11px] sm:text-sm font-medium mt-1">Deep insights into inventory performance</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button className="flex items-center gap-2 px-3 sm:px-4 h-9 sm:h-10 border border-slate-200 rounded-lg bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-[10px] sm:text-xs shrink-0">
-            <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" />
-            <span className="truncate">Last 30 Days</span> <ChevronDown className="w-3 h-3 text-slate-400" />
-          </button>
-          <button className="flex items-center gap-2 px-3 sm:px-4 h-9 sm:h-10 border border-slate-200 rounded-lg bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-[10px] sm:text-xs shrink-0">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Period selector pills */}
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            {(['Today', 'This Week', 'This Month', 'This Year', 'Custom'] as TimePeriod[]).map((period) => (
+              <button
+                key={period}
+                onClick={() => setSelectedPeriod(period)}
+                className={cn(
+                  "px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-all",
+                  selectedPeriod === period
+                    ? "bg-white text-slate-950 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                )}
+              >
+                {period}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom Date Picker Fields */}
+          {selectedPeriod === 'Custom' && (
+            <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-1 duration-150">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-2 py-1 text-xs font-bold text-slate-700 bg-transparent border-0 outline-none focus:ring-0 cursor-pointer"
+              />
+              <span className="text-slate-400 text-[10px] font-black uppercase">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-2 py-1 text-xs font-bold text-slate-700 bg-transparent border-0 outline-none focus:ring-0 cursor-pointer"
+              />
+            </div>
+          )}
+
+          <button 
+            onClick={() => {
+              // Trigger simple refresh by reloading window or resetting loaded states
+              setProductsLoaded(false);
+              setMovementsLoaded(false);
+            }}
+            className="flex items-center gap-2 px-3 sm:px-4 h-9 sm:h-10 border border-slate-200 rounded-xl bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-[10px] sm:text-xs shrink-0"
+          >
             <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" />
             <span className="truncate">Refresh</span>
           </button>
-          <button className="flex items-center gap-2 bg-[#0f172a] text-white px-3 sm:px-5 h-9 sm:h-10 rounded-lg font-bold hover:bg-slate-800 transition-all text-[10px] sm:text-xs shrink-0">
+          <button className="flex items-center gap-2 bg-[#0f172a] text-white px-3 sm:px-5 h-9 sm:h-10 rounded-xl font-bold hover:bg-slate-800 transition-all text-[10px] sm:text-xs shrink-0">
             <FileDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="truncate">Export Report</span>
           </button>
@@ -186,8 +286,8 @@ export function Analytics() {
             <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-emerald-500" />
           </div>
           <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base md:text-lg font-bold text-slate-900 leading-none truncate">4.2x</p>
-            <p className="text-[8px] sm:text-[10px] md:text-xs font-medium text-slate-400 mt-0.5 sm:mt-1.5 leading-tight truncate">Avg Turnover</p>
+            <p className="text-xs sm:text-base md:text-lg font-bold text-slate-900 leading-none truncate font-mono">{overallTurnover.toFixed(2)}x</p>
+            <p className="text-[8px] sm:text-[10px] md:text-xs font-medium text-slate-400 mt-0.5 sm:mt-1.5 leading-tight truncate">Turnover ({selectedPeriod})</p>
           </div>
         </div>
         {/* Total Inventory */}
@@ -577,14 +677,138 @@ export function Analytics() {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-function ChevronDown({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 12 15 18 9"></polyline>
-    </svg>
+      {/* Product-level Stock Turnover Table */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm text-left">
+        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-extrabold text-slate-900">Product Turnover & Inventory Velocity</h3>
+            <p className="text-xs font-medium text-slate-400 mt-0.5">
+              Ratios computed from real transaction logs for period: <span className="font-bold text-blue-600">{selectedPeriod}</span>
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center gap-2">
+            {/* Search input */}
+            <div className="relative w-full sm:w-60">
+              <input
+                type="text"
+                placeholder="Search name or SKU..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-3 py-1.5 pl-8 text-xs font-semibold border border-slate-200 rounded-xl outline-none focus:border-blue-500 transition-colors bg-slate-50/50"
+              />
+              <svg
+                className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            
+            {/* Category Filter */}
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full sm:w-40 px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-xl outline-none focus:border-blue-500 transition-colors bg-white text-slate-700"
+            >
+              {categoriesList.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                <th className="px-6 py-4">Product Info</th>
+                <th className="px-6 py-4">Category</th>
+                <th className="px-6 py-4 text-right">Units Sold</th>
+                <th className="px-6 py-4 text-right">Beg. Stock</th>
+                <th className="px-6 py-4 text-right">End. Stock</th>
+                <th className="px-6 py-4 text-right">Avg. Stock</th>
+                <th className="px-6 py-4 text-right">COGS</th>
+                <th className="px-6 py-4 text-right">Turnover Ratio</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredProductsStats.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400 text-xs font-medium">
+                    No matching products found.
+                  </td>
+                </tr>
+              ) : (
+                filteredProductsStats.map((stat) => {
+                  let speedBadgeColor = "text-amber-600 bg-amber-50 border-amber-100/40";
+                  let speedText = "Moderate";
+                  if (stat.turnoverRatio >= 4.0) {
+                    speedBadgeColor = "text-emerald-600 bg-emerald-50 border-emerald-100/40";
+                    speedText = "High Velocity";
+                  } else if (stat.turnoverRatio < 1.0) {
+                    speedBadgeColor = "text-rose-600 bg-rose-50 border-rose-100/40";
+                    speedText = "Slow Velocity";
+                  }
+
+                  return (
+                    <tr key={stat.productId} className="hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate max-w-[200px]">
+                            {stat.productName}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400 mt-0.5">
+                            SKU: {stat.sku || 'N/A'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full uppercase tracking-tight">
+                          {stat.category}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-800 font-mono text-xs">
+                        {stat.unitsSold.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right font-medium text-slate-500 font-mono text-xs">
+                        {stat.beginningStock.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right font-medium text-slate-500 font-mono text-xs">
+                        {stat.endingStock.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right font-medium text-slate-700 font-mono text-xs">
+                        {stat.averageStock.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-900 font-mono text-xs">
+                        {currency}{stat.cogs.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex flex-col items-end gap-1.5">
+                          <span className="text-xs font-black text-slate-950 font-mono">
+                            {stat.turnoverRatio.toFixed(2)}x
+                          </span>
+                          <span className={cn("text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded border tracking-wider", speedBadgeColor)}>
+                            {speedText}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10px] font-bold text-slate-400">
+          <span>Showing {filteredProductsStats.length} of {overallStats.productsStats.length} products</span>
+          <span className="font-mono text-blue-600 font-black">
+            Turnover Ratio = Units Sold (or COGS) ÷ Average Inventory (Quantity or Value)
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }

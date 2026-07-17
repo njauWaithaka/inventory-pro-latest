@@ -188,7 +188,7 @@ export function POS() {
       return [...prev, { 
         id: product.id, 
         name: product.name, 
-        price: product.value || 0, 
+        price: product.sellingPrice || product.value || 0, 
         quantity: Math.min(availableQty, qty),
         category: product.category,
         sku: product.sku,
@@ -271,7 +271,7 @@ export function POS() {
           sellingPrice: item.price,
           totalAmount: item.quantity * item.price,
           saleDate: new Date().toISOString().split('T')[0],
-          customerId: receiptData.customerId || "Walk-in Customer",
+          customerId: (receiptData as any).customerId || "Walk-in Customer",
           createdAt: new Date().toISOString(),
           timestamp: serverTimestamp(),
         });
@@ -677,7 +677,7 @@ export function POS() {
                         "text-[8px] font-bold uppercase tracking-wider block mb-2",
                         isOutOfStock 
                           ? "text-rose-500 font-extrabold" 
-                          : product.quantity <= 10 
+                          : product.quantity <= (product.reorderPoint ?? product.minStock ?? 10) 
                             ? "text-amber-500 font-extrabold" 
                             : "text-emerald-500 font-semibold"
                       )}>
@@ -685,7 +685,7 @@ export function POS() {
                       </span>
 
                       <p className={cn("text-xs font-black mt-auto", isOutOfStock ? "text-slate-400" : "text-emerald-600")}>
-                        {currency} {product.value?.toLocaleString()}
+                        {currency} {(product.sellingPrice || product.value || 0).toLocaleString()}
                       </p>
                     </button>
                   );
@@ -720,7 +720,7 @@ export function POS() {
                             "text-[9px] font-black uppercase tracking-wider block px-1.5 py-0.5 rounded",
                             isOutOfStock 
                               ? "text-rose-600 bg-rose-50 border border-rose-100" 
-                              : product.quantity <= 10 
+                              : product.quantity <= (product.reorderPoint ?? product.minStock ?? 10) 
                                 ? "text-amber-600 bg-amber-50 border border-amber-100" 
                                 : "text-emerald-600 bg-emerald-50 border border-emerald-100"
                           )}>
@@ -737,7 +737,7 @@ export function POS() {
                       
                       <div className="mt-auto pt-3 border-t border-slate-50 flex items-center justify-between">
                         <p className={cn("text-base font-black", isOutOfStock ? "text-slate-400" : "text-emerald-600")}>
-                          {currency} {product.value?.toLocaleString()}
+                          {currency} {(product.sellingPrice || product.value || 0).toLocaleString()}
                         </p>
                         <button 
                           onClick={() => addToCart(product)}

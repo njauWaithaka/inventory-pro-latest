@@ -83,6 +83,7 @@ export function Inventory() {
     quantity: 0,
     reason: "manual",
     customReason: "",
+    imageString: "",
   });
 
   const [activeInventoryTab, setActiveInventoryTab] = useState<"stock" | "transfers">("stock");
@@ -155,6 +156,19 @@ export function Inventory() {
     );
 
     return unsubscribe;
+  }, [profile?.companyId]);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const triggerSync = async () => {
+      try {
+        const { AlertService } = await import("../../lib/alertService");
+        await AlertService.runAlertSync(profile.companyId);
+      } catch (err) {
+        console.error("Failed to run alert sync on load:", err);
+      }
+    };
+    triggerSync();
   }, [profile?.companyId]);
 
   const [dbCategories, setDbCategories] = useState<string[]>([]);
@@ -287,7 +301,7 @@ export function Inventory() {
           ? adjustmentData.customReason || "Manual Adjustment"
           : adjustmentData.reason;
 
-      const movementId = `mov_${Date.now()}`;
+       const movementId = `mov_${Date.now()}`;
       await setDoc(
         doc(db, `companies/${profile.companyId}/stockMovements`, movementId),
         {
@@ -300,6 +314,7 @@ export function Inventory() {
           reason: finalReason,
           createdAt: new Date().toISOString(),
           createdBy: user?.uid || "system",
+          verificationImage: adjustmentData.imageString || "",
 
           // Audit and Analytical Fields (Target Schema Alignment)
           transactionId: movementId,
@@ -317,7 +332,12 @@ export function Inventory() {
         quantity: 0,
         reason: "manual",
         customReason: "",
+        imageString: "",
       });
+
+      // Trigger the AlertSync
+      const { AlertService } = await import("../../lib/alertService");
+      await AlertService.runAlertSync(profile.companyId);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "products");
     }
@@ -905,7 +925,7 @@ export function Inventory() {
                     </span>
                     <span className={cn(
                       "text-xl font-black",
-                      selectedProductDetail.quantity < 50 ? "text-rose-600" : "text-slate-900"
+                      selectedProductDetail.quantity <= (selectedProductDetail.reorderPoint ?? selectedProductDetail.minStock ?? 10) ? "text-rose-600" : "text-slate-900"
                     )}>
                       {selectedProductDetail.quantity.toLocaleString()} <span className="text-xs font-semibold text-slate-400">({selectedProductDetail.uom || "pcs"})</span>
                     </span>
@@ -1066,6 +1086,60 @@ export function Inventory() {
                       <span className="text-xs font-semibold text-slate-700">
                         {selectedProductDetail.expiryDate || "Infinite Lifecycle"}
                       </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reorder Threshold Override Section */}
+                <div className="space-y-3">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
+                    Reorder point & alerts
+                  </h4>
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-3">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Average Daily Sales (ADS)</span>
+                        <span className="font-bold text-slate-800">{(selectedProductDetail as any).averageDailySales ? (selectedProductDetail as any).averageDailySales.toFixed(2) : "0.00"} / day</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Auto Reorder Point</span>
+                        <span className="font-bold text-slate-800">{(selectedProductDetail as any).calculatedReorderPoint || 0} units</span>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                        Manual Override Threshold (Units)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="No override set"
+                        defaultValue={(selectedProductDetail as any).manualReorderPoint !== undefined && (selectedProductDetail as any).manualReorderPoint !== null ? (selectedProductDetail as any).manualReorderPoint : ""}
+                        onBlur={async (e) => {
+                          const val = e.target.value === "" ? null : Number(e.target.value);
+                          try {
+                            if (!profile?.companyId) return;
+                            const pRef = doc(db, `companies/${profile.companyId}/products`, selectedProductDetail.id);
+                            await updateDoc(pRef, {
+                              manualReorderPoint: val
+                            });
+                            // Also trigger the AlertSync!
+                            const { AlertService } = await import('../../lib/alertService');
+                            await AlertService.runAlertSync(profile.companyId);
+                            // Update local state to reflect override immediately
+                            setSelectedProductDetail(prev => prev ? {
+                              ...prev,
+                              manualReorderPoint: val === null ? undefined : val,
+                              minStock: val === null ? (prev as any).calculatedReorderPoint || 0 : val
+                            } : null);
+                          } catch (err) {
+                            console.error(err);
+                          }
+                        }}
+                        className="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold"
+                      />
+                      <p className="text-[9px] text-slate-400 mt-1 font-medium">
+                        Leave blank to use the automatically calculated reorder point.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1258,6 +1332,57 @@ export function Inventory() {
                       />
                     </motion.div>
                   )}
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">
+                      Verification Photo / Receipt (Optional)
+                    </label>
+                    <div className="flex flex-col gap-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        id="verification-image-upload"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setAdjustmentData(prev => ({
+                                ...prev,
+                                imageString: reader.result as string
+                              }));
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor="verification-image-upload"
+                        className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-xl p-4 bg-slate-50 cursor-pointer hover:bg-slate-100/50 transition-all text-center gap-1.5"
+                      >
+                        <span className="text-xs font-bold text-slate-600">Select Image File</span>
+                        <span className="text-[10px] font-semibold text-slate-400">PNG, JPG up to 5MB</span>
+                      </label>
+                      {adjustmentData.imageString && (
+                        <div className="relative mt-1 w-24 h-24 rounded-lg overflow-hidden border border-slate-200">
+                          <img
+                            src={adjustmentData.imageString}
+                            alt="Verification preview"
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setAdjustmentData(prev => ({ ...prev, imageString: "" }))}
+                            className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-sm"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-100 flex gap-3">
@@ -1925,7 +2050,7 @@ export function Inventory() {
           },
           {
             label: "Low Stock Items",
-            val: allProducts.filter((p) => p.quantity < 50).length.toString(),
+            val: allProducts.filter((p) => p.quantity <= (p.reorderPoint ?? p.minStock ?? 10)).length.toString(),
             sub: "Needs reordering",
             variant: "rose",
           },
@@ -2212,8 +2337,8 @@ export function Inventory() {
                     <span
                       className={cn(
                         "text-sm font-bold",
-                        product.quantity < 50
-                          ? "text-rose-500"
+                        product.quantity <= (product.reorderPoint ?? product.minStock ?? 10)
+                          ? "text-rose-500 font-extrabold"
                           : "text-slate-900",
                       )}
                     >
@@ -2358,8 +2483,8 @@ export function Inventory() {
                           <span
                             className={cn(
                               "text-sm font-extrabold",
-                              product.quantity < 50
-                                ? "text-rose-500"
+                              product.quantity <= (product.reorderPoint ?? product.minStock ?? 10)
+                                ? "text-rose-500 font-black"
                                 : "text-slate-900",
                             )}
                           >
@@ -2486,7 +2611,24 @@ export function Inventory() {
                           {mov.createdBy || "System"}
                         </td>
                         <td className="px-6 py-4 text-slate-400 italic max-w-[200px] truncate" title={mov.reason}>
-                          {mov.reason || "Inter-branch balance adjustment"}
+                          <div className="flex items-center gap-2">
+                            <span>{mov.reason || "Inter-branch balance adjustment"}</span>
+                            {mov.verificationImage && (
+                              <button
+                                onClick={() => {
+                                  const win = window.open();
+                                  if (win) {
+                                    win.document.write(`<img src="${mov.verificationImage}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                                  } else {
+                                    alert("Pop-up blocked. Image preview is attached directly in the record.");
+                                  }
+                                }}
+                                className="px-1.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 rounded text-[9px] font-bold uppercase tracking-wide transition-colors shrink-0"
+                              >
+                                View Photo
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

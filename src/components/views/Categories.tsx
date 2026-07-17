@@ -540,7 +540,7 @@ export function Categories() {
                     </div>
                   ) : (
                     drawerProducts.map(product => {
-                      const isLowStock = (product.quantity || 0) <= 10;
+                      const isLowStock = (product.quantity || 0) <= (product.reorderPoint ?? product.minStock ?? 10);
                       const isOutOfStock = (product.quantity || 0) <= 0;
                       return (
                         <div 

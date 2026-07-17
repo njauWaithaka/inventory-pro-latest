@@ -36,11 +36,15 @@ export function PurchaseOrders() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // New PO State
   const [supplierId, setSupplierId] = useState('');
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<POItem[]>([]);
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -79,11 +83,11 @@ export function PurchaseOrders() {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     
-    // Auto-fill price if product selected
+    // Auto-fill price if product selected with multiple fallback strategies
     if (field === 'productId' && value) {
       const product = products.find(p => p.id === value);
       if (product) {
-        newItems[index].unitPrice = product.value; // Assuming value is cost price
+        newItems[index].unitPrice = product.buyingPrice ?? product.value ?? 0;
       }
     }
     
@@ -94,6 +98,7 @@ export function PurchaseOrders() {
     e.preventDefault();
     if (!profile?.companyId || !supplierId || items.length === 0) return;
     
+    setError(null);
     setConfirmConfig({
       isOpen: true,
       title: "Place Purchase Order",
@@ -104,25 +109,59 @@ export function PurchaseOrders() {
         setSubmitting(true);
         setConfirmConfig(prev => ({ ...prev, isOpen: false }));
         try {
-          const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+          const totalAmount = items.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
           const poNumber = `PO-${Math.floor(1000 + Math.random() * 9000)}`;
           
+          const selectedSupplier = suppliers.find(s => s.id === supplierId);
+          const mappedItems = items.map(item => {
+            const product = products.find(p => p.id === item.productId);
+            return {
+              productId: item.productId || '',
+              quantity: Number(item.quantity) || 0,
+              unitPrice: Number(item.unitPrice) || 0,
+              receivedQuantity: Number(item.receivedQuantity) || 0,
+              productName: product?.name || '',
+              sku: product?.sku || ''
+            };
+          });
+
           await ProcurementService.createPurchaseOrder(profile.companyId, {
             poNumber,
-            supplierId,
+            supplierId: supplierId || '',
             date: new Date().toISOString(),
-            totalAmount,
+            totalAmount: Number(totalAmount) || 0,
             status: 'PENDING',
-            items,
-            notes
+            items: mappedItems,
+            notes: notes || '',
+            expectedDeliveryDate: expectedDeliveryDate || '',
+            createdBy: user?.uid || '',
+            createdByName: user?.displayName || profile?.name || 'User',
+            userEmail: user?.email || '',
+            supplierName: selectedSupplier?.name || '',
+            supplierEmail: selectedSupplier?.email || '',
+            supplierPhone: selectedSupplier?.phone || '',
+            supplierKraPin: selectedSupplier?.kraPin || ''
           });
           
           setShowModal(false);
           setSupplierId('');
           setItems([]);
           setNotes('');
-        } catch (error) {
-          console.error(error);
+          setError(null);
+        } catch (err: any) {
+          console.error(err);
+          let msg = "Failed to save purchase order. Please verify that all fields are correct and try again.";
+          if (err instanceof Error) {
+            try {
+              const parsed = JSON.parse(err.message);
+              if (parsed && parsed.error) {
+                msg = parsed.error;
+              }
+            } catch {
+              msg = err.message;
+            }
+          }
+          setError(msg);
         } finally {
           setSubmitting(false);
         }
@@ -149,6 +188,25 @@ export function PurchaseOrders() {
     });
   };
 
+  const handleClosePO = (poId: string, poNumber: string) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Close Purchase Order",
+      message: `Are you sure you want to close purchase order ${poNumber}? This will mark it as CLOSED, preventing any further deliveries from being posted.`,
+      confirmText: "Close Order",
+      type: "warning",
+      onConfirm: async () => {
+        if (!profile?.companyId) return;
+        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await ProcurementService.updatePOStatus(profile.companyId, poId, 'CLOSED');
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -166,7 +224,10 @@ export function PurchaseOrders() {
         </div>
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setError(null);
+              setShowModal(true);
+            }}
             className="flex items-center gap-2 bg-[#0f172a] text-white px-5 h-10 rounded-lg font-bold hover:bg-slate-800 transition-all text-xs shrink-0"
           >
             <Plus className="w-4 h-4" />
@@ -186,8 +247,9 @@ export function PurchaseOrders() {
                     <h3 className="font-extrabold text-slate-900 tracking-tight">{po.poNumber}</h3>
                     <span className={cn(
                       "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border",
-                      po.status === 'APPROVED' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
-                      po.status === 'RECEIVED' ? "bg-slate-100 text-slate-600 border-slate-200" :
+                      po.status === 'FULLY RECEIVED' || po.status === 'RECEIVED' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
+                      po.status === 'PARTIALLY RECEIVED' || po.status === 'PARTIAL' ? "bg-amber-50 text-amber-600 border-amber-100" :
+                      po.status === 'CLOSED' || po.status === 'CANCELLED' ? "bg-slate-100 text-slate-600 border-slate-200" :
                       "bg-blue-50 text-blue-600 border-blue-100"
                     )}>
                       {po.status}
@@ -197,6 +259,12 @@ export function PurchaseOrders() {
                     <span className="text-slate-600 font-bold">{supplier?.name || 'Unknown Supplier'}</span>
                     <span>•</span>
                     <span>Ordered {new Date(po.date).toLocaleDateString()}</span>
+                    {po.expectedDeliveryDate && (
+                      <>
+                        <span>•</span>
+                        <span className="text-amber-600 font-semibold">Expected: {new Date(po.expectedDeliveryDate).toLocaleDateString()}</span>
+                      </>
+                    )}
                     <span>•</span>
                     <span>{po.items?.length || 0} items</span>
                   </div>
@@ -214,6 +282,14 @@ export function PurchaseOrders() {
                      >
                        <CheckCircle2 className="w-3.5 h-3.5" />
                        Approve
+                     </button>
+                   )}
+                   {(po.status === 'PENDING' || po.status === 'PARTIALLY RECEIVED' || po.status === 'PARTIAL' || po.status === 'APPROVED' || po.status === 'SHIPPED') && (
+                     <button 
+                       onClick={() => handleClosePO(po.id, po.poNumber)}
+                       className="flex items-center gap-2 px-3 h-9 bg-rose-600 text-white rounded-lg font-bold hover:bg-rose-700 transition-all text-[10px] uppercase tracking-widest"
+                     >
+                       Close PO
                      </button>
                    )}
                    <button className="flex items-center gap-2 px-3 h-9 border border-slate-200 rounded-lg bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-[10px] uppercase tracking-widest">
@@ -250,6 +326,11 @@ export function PurchaseOrders() {
               </div>
 
               <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto no-scrollbar">
+                {error && (
+                  <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 text-xs font-bold text-left animate-in fade-in slide-in-from-top-2 duration-200">
+                    {error}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="text-left">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1.5 block">Supplier</label>
@@ -262,6 +343,16 @@ export function PurchaseOrders() {
                       <option value="">Select Supplier</option>
                       {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
+                  </div>
+                  <div className="text-left">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1.5 block">Expected Delivery Date</label>
+                    <input 
+                      type="date"
+                      required
+                      value={expectedDeliveryDate}
+                      onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                      className="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    />
                   </div>
                 </div>
 

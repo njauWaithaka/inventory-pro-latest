@@ -38,6 +38,7 @@ export function Invoices({ filterType }: { filterType?: 'standard' | 'proforma' 
   const [isNewInvoiceOpen, setIsNewInvoiceOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   
   // New Invoice Form State
@@ -75,6 +76,11 @@ export function Invoices({ filterType }: { filterType?: 'standard' | 'proforma' 
       const q = collection(db, `companies/${profile.companyId}/products`);
       getDocs(q).then(snapshot => {
         setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+
+      const custQ = collection(db, `companies/${profile.companyId}/customers`);
+      getDocs(custQ).then(snapshot => {
+        setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
     }
   }, [isNewInvoiceOpen, profile?.companyId]);
@@ -392,6 +398,31 @@ export function Invoices({ filterType }: { filterType?: 'standard' | 'proforma' 
               <div className="flex-1 overflow-y-auto p-6 space-y-8">
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-4">
+                    <div className="bg-slate-100/60 p-4 rounded-xl border border-slate-200/50 mb-3 text-left">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 mb-1 block">Select Profile (Optional)</label>
+                      <select
+                        onChange={(e) => {
+                          const selectedCustId = e.target.value;
+                          if (selectedCustId === 'custom') {
+                            setCustomerName('');
+                          } else {
+                            const cust = customers.find(c => c.id === selectedCustId);
+                            if (cust) {
+                              setCustomerName(cust.name);
+                            }
+                          }
+                        }}
+                        className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 transition-all font-bold text-slate-800 text-xs"
+                      >
+                        <option value="custom">-- Create Custom / Walk-in Customer --</option>
+                        {customers.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} (Tax PIN: {c.taxPin || 'None'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 mb-1.5 block">Customer Name</label>
                       <input 
@@ -755,6 +786,43 @@ export function Invoices({ filterType }: { filterType?: 'standard' | 'proforma' 
                 </div>
 
                 <div className="space-y-3 pt-6 border-t border-slate-100">
+                  {selectedInvoice.status !== 'paid' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await updateDoc(doc(db, `companies/${profile.companyId}/invoices`, selectedInvoice.id), {
+                            status: 'paid',
+                            paymentStatus: 'paid'
+                          });
+
+                          // Record detailed payment audit log
+                          const paymentLogId = `log_pay_${Date.now()}`;
+                          await setDoc(doc(db, `companies/${profile.companyId}/auditLogs`, paymentLogId), {
+                            id: paymentLogId,
+                            eventType: 'invoice_payment_confirmed',
+                            action: 'Invoice Payment Confirmed',
+                            details: `Payment confirmed for Invoice ${selectedInvoice.id}`,
+                            userId: user?.uid || '',
+                            userEmail: user?.email || '',
+                            userName: profile?.name || user?.displayName || 'User',
+                            timestamp: new Date().toISOString(),
+                            createdAt: serverTimestamp()
+                          });
+
+                          setSelectedInvoice(prev => prev ? { ...prev, status: 'paid', paymentStatus: 'paid' } : null);
+                          // Trigger dynamic AlertSync!
+                          const { AlertService } = await import('../../../lib/alertService');
+                          await AlertService.runAlertSync(profile.companyId);
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }}
+                      className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-md"
+                    >
+                      <DollarSign className="w-4 h-4" />
+                      Mark as Paid
+                    </button>
+                  )}
                   <button
                     onClick={handlePrintInvoice}
                     className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-md"
@@ -801,6 +869,11 @@ export function Invoices({ filterType }: { filterType?: 'standard' | 'proforma' 
                           "uppercase",
                           selectedInvoice.status === 'paid' ? "text-emerald-600" : "text-amber-600"
                         )}>{selectedInvoice.status}</strong></p>
+                        {selectedInvoice.sourceQuotationId && (
+                          <p className="text-slate-600 font-semibold">
+                            Source Quotation: <strong className="text-blue-600 font-mono select-all">{selectedInvoice.sourceQuotationId}</strong>
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>

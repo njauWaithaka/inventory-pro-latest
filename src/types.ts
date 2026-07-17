@@ -92,9 +92,11 @@ export interface POItem {
   quantity: number;
   unitPrice: number;
   receivedQuantity: number;
+  productName?: string;
+  sku?: string;
 }
 
-export type POStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'SHIPPED' | 'RECEIVED' | 'CANCELLED';
+export type POStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'SHIPPED' | 'RECEIVED' | 'CANCELLED' | 'PARTIAL' | 'PARTIALLY RECEIVED' | 'FULLY RECEIVED' | 'CLOSED';
 
 export interface PurchaseOrder {
   id: string;
@@ -105,6 +107,14 @@ export interface PurchaseOrder {
   status: POStatus;
   items: POItem[];
   notes?: string;
+  expectedDeliveryDate?: string;
+  createdBy?: string;
+  createdByName?: string;
+  userEmail?: string;
+  supplierName?: string;
+  supplierEmail?: string;
+  supplierPhone?: string;
+  supplierKraPin?: string;
 }
 
 export interface GRNItem {
@@ -122,6 +132,8 @@ export interface GoodReceiptNote {
   supplierId: string;
   items: GRNItem[];
   notes?: string;
+  createdBy?: string;
+  userEmail?: string;
 }
 
 export interface MROIssue {

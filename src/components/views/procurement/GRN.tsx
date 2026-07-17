@@ -20,6 +20,7 @@ export function GRN() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
 
   // New GRN State
   const [poId, setPoId] = useState('');
@@ -48,10 +49,17 @@ export function GRN() {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     });
 
+    // Fetch Suppliers
+    const suppliersPath = `companies/${profile.companyId}/suppliers`;
+    const unsubscribeSuppliers = onSnapshot(collection(db, suppliersPath), (snapshot) => {
+      setSuppliers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
     return () => {
       unsubscribeGrns();
       unsubscribePOs();
       unsubscribeProducts();
+      unsubscribeSuppliers();
     };
   }, [profile?.companyId]);
 
@@ -59,11 +67,14 @@ export function GRN() {
     setPoId(selectedPoId);
     const po = purchaseOrders.find(p => p.id === selectedPoId);
     if (po && po.items) {
-      setGrnItems(po.items.map(item => ({
-        productId: item.productId,
-        orderedQuantity: item.quantity,
-        receivedQuantity: item.quantity // Default to full receipt
-      })));
+      setGrnItems(po.items.map(item => {
+        const remaining = item.quantity - (item.receivedQuantity || 0);
+        return {
+          productId: item.productId,
+          orderedQuantity: item.quantity,
+          receivedQuantity: remaining > 0 ? remaining : 0
+        };
+      }));
     } else {
       setGrnItems([]);
     }
@@ -88,10 +99,12 @@ export function GRN() {
         grnNumber,
         poId,
         receivedDate: new Date().toISOString(),
-        receivedBy: user?.displayName || 'User',
+        receivedBy: user?.displayName || profile?.name || 'User',
         supplierId: selectedPo?.supplierId || '',
         items: grnItems,
-        notes
+        notes,
+        createdBy: user?.uid || '',
+        userEmail: user?.email || ''
       });
 
       setShowModal(false);
@@ -100,6 +113,7 @@ export function GRN() {
       setNotes('');
     } catch (error) {
       console.error(error);
+      alert(error instanceof Error ? error.message : "Failed to receive goods.");
     } finally {
       setSubmitting(false);
     }
@@ -113,7 +127,12 @@ export function GRN() {
     );
   }
 
-  const eligiblePOs = purchaseOrders.filter(po => po.status === 'APPROVED' || po.status === 'SHIPPED');
+  const eligiblePOs = purchaseOrders.filter(po => 
+    po.status !== 'CLOSED' && 
+    po.status !== 'FULLY RECEIVED' && 
+    po.status !== 'RECEIVED' && 
+    po.status !== 'CANCELLED'
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
@@ -204,9 +223,13 @@ export function GRN() {
                     className="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                   >
                     <option value="">Select an Approved PO</option>
-                    {eligiblePOs.map(po => (
-                      <option key={po.id} value={po.id}>{po.poNumber} - {purchaseOrders.find(p => p.id === po.id)?.supplierId}</option>
-                    ))}
+                    {eligiblePOs.map(po => {
+                      const supplier = suppliers.find(s => s.id === po.supplierId);
+                      const sName = po.supplierName || supplier?.name || 'Unknown Supplier';
+                      return (
+                        <option key={po.id} value={po.id}>{po.poNumber} - {sName}</option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -216,6 +239,10 @@ export function GRN() {
                     <div className="space-y-3">
                       {grnItems.map((item, i) => {
                         const product = products.find(p => p.id === item.productId);
+                        const po = purchaseOrders.find(p => p.id === poId);
+                        const poItem = po?.items?.find(pi => pi.productId === item.productId);
+                        const alreadyReceived = poItem?.receivedQuantity || 0;
+                        const remaining = item.orderedQuantity - alreadyReceived;
                         return (
                           <div key={i} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-left">
                             <div className="flex items-center gap-3">
@@ -224,23 +251,33 @@ export function GRN() {
                               </div>
                               <div>
                                 <p className="text-xs font-bold text-slate-900">{product?.name}</p>
-                                <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tighter">Ordered: {item.orderedQuantity}</p>
+                                <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] font-semibold text-slate-500 uppercase tracking-tighter">
+                                  <span>Ordered: {item.orderedQuantity}</span>
+                                  <span>•</span>
+                                  <span className="text-emerald-600">Received: {alreadyReceived}</span>
+                                  <span>•</span>
+                                  <span className="text-amber-600">Remaining: {remaining}</span>
+                                </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
                               <div className="text-right shrink-0">
-                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Received Qty</label>
+                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Receive Now</label>
                                 <input 
                                   type="number"
                                   min="0"
-                                  max={item.orderedQuantity}
+                                  max={remaining}
+                                  disabled={remaining <= 0}
                                   value={item.receivedQuantity}
-                                  onChange={(e) => updateReceivedQty(i, parseInt(e.target.value))}
-                                  className="w-20 h-9 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold text-center"
+                                  onChange={(e) => updateReceivedQty(i, Math.min(remaining, Math.max(0, parseInt(e.target.value) || 0)))}
+                                  className="w-20 h-9 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold text-center disabled:bg-slate-100 disabled:text-slate-400"
                                 />
                               </div>
-                              <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                                <Check className="w-4 h-4 text-emerald-600" />
+                              <div className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                                remaining <= 0 ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
+                              )}>
+                                <Check className="w-4 h-4" />
                               </div>
                             </div>
                           </div>

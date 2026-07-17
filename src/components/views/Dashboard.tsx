@@ -27,8 +27,14 @@ import {
   Lock,
   Wrench,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { cn, formatCompactNumber, getProductMovementSpeed } from "../../lib/utils";
+import {
+  calculateStockTurnover,
+  calculateMonthlyTurnoverTrend,
+  getDateRangeForPeriod,
+} from "../../lib/stockTurnoverService";
 import { motion } from "motion/react";
 import {
   AreaChart,
@@ -66,6 +72,11 @@ export function Dashboard({
   const [products, setProducts] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+  const [grns, setGrns] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [creditNotes, setCreditNotes] = useState<any[]>([]);
+  const [stockMovements, setStockMovements] = useState<any[]>([]);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -77,6 +88,26 @@ export function Dashboard({
     const alertsQuery = collection(
       db,
       `companies/${profile.companyId}/inventory_alerts`,
+    );
+    const poQuery = collection(
+      db,
+      `companies/${profile.companyId}/purchaseOrders`,
+    );
+    const grnQuery = collection(
+      db,
+      `companies/${profile.companyId}/grns`,
+    );
+    const invoicesQuery = collection(
+      db,
+      `companies/${profile.companyId}/invoices`,
+    );
+    const creditNotesQuery = collection(
+      db,
+      `companies/${profile.companyId}/credit_notes`,
+    );
+    const movementsQuery = collection(
+      db,
+      `companies/${profile.companyId}/stockMovements`,
     );
 
     const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
@@ -95,9 +126,44 @@ export function Dashboard({
       setAlerts(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
 
+    const unsubscribePOs = onSnapshot(poQuery, (snapshot) => {
+      setPurchaseOrders(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeGrns = onSnapshot(grnQuery, (snapshot) => {
+      setGrns(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeInvoices = onSnapshot(invoicesQuery, (snapshot) => {
+      setInvoices(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeCreditNotes = onSnapshot(creditNotesQuery, (snapshot) => {
+      setCreditNotes(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeMovements = onSnapshot(movementsQuery, (snapshot) => {
+      setStockMovements(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const triggerSync = async () => {
+      try {
+        const { AlertService } = await import('../../lib/alertService');
+        await AlertService.runAlertSync(profile.companyId);
+      } catch (err) {
+        console.error("Dashboard alerts sync failed:", err);
+      }
+    };
+    triggerSync();
+
     return () => {
       unsubscribeProducts();
       unsubscribeAlerts();
+      unsubscribePOs();
+      unsubscribeGrns();
+      unsubscribeInvoices();
+      unsubscribeCreditNotes();
+      unsubscribeMovements();
     };
   }, [profile?.companyId]);
 
@@ -107,22 +173,8 @@ export function Dashboard({
   const allAlerts = [...alerts];
 
   const turnoverRatioData = useMemo(() => {
-    let totalSold = 0;
-    let totalStock = 0;
-    products.forEach(p => {
-      totalSold += parseFloat(p.unitsSold || 0);
-      totalStock += parseFloat(p.quantity || 0);
-    });
-    const ratio = totalStock > 0 ? (totalSold / totalStock) * 3 : 3.5;
-    const months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return months.map((m, idx) => {
-      const variation = Math.sin(idx) * 0.4;
-      return {
-        name: m,
-        turnover: Math.max(0.5, parseFloat((ratio + variation).toFixed(1)))
-      };
-    });
-  }, [products]);
+    return calculateMonthlyTurnoverTrend(products, stockMovements);
+  }, [products, stockMovements]);
 
   const totalCapital = allProducts.reduce(
     (sum, p) => sum + (p.value || 0) * (p.quantity || 0),
@@ -132,7 +184,29 @@ export function Dashboard({
   const lowStockCount = allProducts.filter(
     (p) => p.quantity <= p.minStock,
   ).length;
-  const activeAlertsCount = allAlerts.length;
+  const activeAlertsCount = allAlerts.filter(
+    (a) => a.status !== "resolved" && a.status !== "dismissed"
+  ).length;
+
+  const activeAlertsList = useMemo(() => {
+    const severityWeights: Record<string, number> = {
+      critical: 4,
+      high: 3,
+      medium: 2,
+      low: 1
+    };
+
+    return allAlerts
+      .filter((a) => a.status !== "resolved" && a.status !== "dismissed")
+      .sort((a, b) => {
+        const weightA = severityWeights[a.severity] || 0;
+        const weightB = severityWeights[b.severity] || 0;
+        if (weightA !== weightB) {
+          return weightB - weightA;
+        }
+        return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
+      });
+  }, [allAlerts]);
 
   // ABC Analysis Calculation
   const sortedProducts = [...allProducts].sort(
@@ -273,6 +347,39 @@ export function Dashboard({
     }, [])
     .sort((a, b) => b.value - a.value);
 
+  // Dynamic Stock Turnover Calculation
+  const stockTurnoverCalc = useMemo(() => {
+    const range = getDateRangeForPeriod('This Month');
+    const stats = calculateStockTurnover(products, stockMovements, range);
+    const ratio = stats.overallRatio;
+
+    // Compare with trend data
+    const values = turnoverRatioData.map(d => d.turnover);
+    const midIdx = Math.floor(values.length / 2);
+    const firstHalf = values.slice(0, midIdx);
+    const secondHalf = values.slice(midIdx);
+    
+    const firstAvg = firstHalf.length > 0 ? firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length : 0;
+    const secondAvg = secondHalf.length > 0 ? secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length : ratio;
+
+    const percentChange = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg) * 100 : (secondAvg === 0 ? 0 : 8.3);
+    const isPositive = percentChange >= 0;
+    const sign = isPositive ? "+" : "";
+
+    let badgeText = "HEALTHY";
+    if (ratio >= 4.0) {
+      badgeText = "EXCELLENT";
+    } else if (ratio < 1.5) {
+      badgeText = "LOW TURNOVER";
+    }
+
+    return {
+      value: `${ratio.toFixed(1)}x`,
+      subtitle: `${sign}${percentChange.toFixed(1)}% vs prior period`,
+      badgeText
+    };
+  }, [products, stockMovements, turnoverRatioData]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F5F7FB]">
@@ -317,11 +424,11 @@ export function Dashboard({
           />
           <SummaryCard
             title="Stock Turnover"
-            value="4.2x"
-            subtitle="+8.3% this quarter"
+            value={stockTurnoverCalc.value}
+            subtitle={stockTurnoverCalc.subtitle}
             icon={RefreshCcw}
             gradient="from-[#23AFA5] to-[#31C5B5]"
-            badgeText="HEALTHY"
+            badgeText={stockTurnoverCalc.badgeText}
           />
         </div>
 
@@ -636,28 +743,39 @@ export function Dashboard({
               </button>
             </div>
 
-            <div className="space-y-4 flex-1">
-              <AlertItem
-                type="reorder"
-                title="Reorder Required"
-                message="15 units of Industrial Cables below minimum."
-                time="1h ago"
-                onClick={() => onNavigate?.("inventory")}
-              />
-              <AlertItem
-                type="expiry"
-                title="Expiry Risk"
-                message="Batch #492 expiring in 14 days."
-                time="3h ago"
-                onClick={() => onNavigate?.("expiry_tracking")}
-              />
-              <AlertItem
-                type="overstock"
-                title="Overstock Risk"
-                message="Storage B nearing capacity limit."
-                time="6h ago"
-                onClick={() => onNavigate?.("alerts")}
-              />
+            <div className="space-y-4 flex-1 flex flex-col justify-center">
+              {activeAlertsList.length > 0 ? (
+                <div className="space-y-4 w-full h-full">
+                  {activeAlertsList.slice(0, 3).map((alert) => (
+                    <AlertItem
+                      key={alert.id}
+                      type={alert.type}
+                      title={alert.title}
+                      message={alert.description}
+                      time={timeAgo(alert.timestamp)}
+                      onClick={() => {
+                        if (alert.type === "expiry") {
+                          onNavigate?.("expiry_tracking");
+                        } else if (alert.type === "reorder") {
+                          onNavigate?.("inventory");
+                        } else {
+                          onNavigate?.("alerts");
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 px-4 border border-dashed border-[#DDE5F0] rounded-xl bg-slate-50 text-center flex-1 h-full min-h-[250px] w-full">
+                  <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mb-3">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">All systems clear</h4>
+                  <p className="text-xs text-[#526789] mt-1 max-w-[240px]">
+                    No high priority alerts. Your inventory levels are balanced.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1048,4 +1166,27 @@ function AlertItem({ type, title, message, time, onClick }: any) {
       </div>
     </div>
   );
+}
+
+function timeAgo(dateString?: string): string {
+  if (!dateString) return 'Just now';
+  try {
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return 'Just now';
+    
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    return `${diffDays}d ago`;
+  } catch {
+    return 'Recently';
+  }
 }

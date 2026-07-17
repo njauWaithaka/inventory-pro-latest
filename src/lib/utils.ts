@@ -30,8 +30,16 @@ export function getSellThroughRate(product: { quantity?: number; unitsSold?: num
   return (sold / received) * 100;
 }
 
-export function getProductMovementSpeed(product: { quantity?: number; unitsSold?: number; unitsReceived?: number; movement?: string }): 'fast' | 'moderate' | 'slow' | 'obsolete' {
+export function getProductMovementSpeed(product: { quantity?: number; unitsSold?: number; unitsReceived?: number; movement?: string; averageDailySales?: number }): 'fast' | 'moderate' | 'slow' | 'obsolete' {
   if (product.movement === 'obsolete') return 'obsolete';
+  
+  // If Average Daily Sales (ADS) is available, prioritize classifying based on ADS sales rate
+  if (typeof product.averageDailySales === 'number') {
+    if (product.averageDailySales >= 1.0) return 'fast';
+    if (product.averageDailySales >= 0.3) return 'moderate';
+    return 'slow';
+  }
+  
   const str = getSellThroughRate(product);
   if (str >= 70) return 'fast';
   if (str >= 40) return 'moderate';
