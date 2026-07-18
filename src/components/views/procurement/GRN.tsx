@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Printer, Package, MoreVertical, Loader2, X, Check, ArrowRight } from 'lucide-react';
+import { Plus, Printer, Package, MoreVertical, Loader2, X, Check, ArrowRight, AlertCircle } from 'lucide-react';
 import { collection, onSnapshot, query, where, doc, getDocs } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { handleFirestoreError, OperationType } from '../../../lib/firestoreUtils';
@@ -88,14 +88,39 @@ export function GRN() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.companyId || !poId || grnItems.length === 0) return;
+    console.log("[GRN.tsx] handleSubmit triggered.");
+    console.log("[GRN.tsx] Initial state checklist:", {
+      companyId: profile?.companyId,
+      poId: poId,
+      grnItemsLength: grnItems.length,
+      grnItems: grnItems
+    });
+
+    if (!profile?.companyId) {
+      console.error("[GRN.tsx] Missing companyId in profile:", profile);
+      return;
+    }
+    if (!poId) {
+      console.error("[GRN.tsx] Missing poId selected.");
+      return;
+    }
+    if (grnItems.length === 0) {
+      console.error("[GRN.tsx] grnItems array is empty.");
+      return;
+    }
+    if (!notes.trim()) {
+      console.error("[GRN.tsx] Verification note is missing.");
+      alert("A valid verification note is required before the PO can be submitted.");
+      return;
+    }
 
     setSubmitting(true);
     try {
       const selectedPo = purchaseOrders.find(p => p.id === poId);
+      console.log("[GRN.tsx] Selected purchase order metadata from memory state:", selectedPo);
+      
       const grnNumber = `GRN-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      await ProcurementService.createGRN(profile.companyId, {
+      const payload = {
         grnNumber,
         poId,
         receivedDate: new Date().toISOString(),
@@ -105,17 +130,29 @@ export function GRN() {
         notes,
         createdBy: user?.uid || '',
         userEmail: user?.email || ''
-      });
+      };
+      
+      console.log("[GRN.tsx] Submitting GRN payload to ProcurementService.createGRN:", JSON.stringify(payload, null, 2));
+
+      const result = await ProcurementService.createGRN(profile.companyId, payload);
+      
+      console.log("[GRN.tsx] ProcurementService.createGRN succeeded! Returned GRN:", result);
 
       setShowModal(false);
       setPoId('');
       setGrnItems([]);
       setNotes('');
     } catch (error) {
-      console.error(error);
+      console.error("[GRN.tsx] Error occurred during ProcurementService.createGRN submission! Error details:", error);
+      if (error instanceof Error) {
+        console.error("[GRN.tsx] Error name:", error.name);
+        console.error("[GRN.tsx] Error message:", error.message);
+        console.error("[GRN.tsx] Error stack:", error.stack);
+      }
       alert(error instanceof Error ? error.message : "Failed to receive goods.");
     } finally {
       setSubmitting(false);
+      console.log("[GRN.tsx] handleSubmit execution finished.");
     }
   };
 
@@ -287,22 +324,35 @@ export function GRN() {
                   </div>
                 )}
 
-                <div className="text-left">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1.5 block">Verification Notes</label>
+                <div className="text-left space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1.5 block flex justify-between items-center">
+                    <span>Verification Notes <span className="text-rose-500 font-extrabold">*</span></span>
+                    <span className="text-[9px] text-rose-500 font-bold lowercase tracking-wider">Note is mandatory</span>
+                  </label>
                   <textarea 
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full h-24 bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Condition of goods, discrepancy notes, etc..."
+                    required
+                    className={cn(
+                      "w-full h-24 bg-slate-50 border rounded-xl p-4 text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500 transition-all",
+                      !notes.trim() && poId ? "border-rose-300 focus:ring-rose-500 bg-rose-50/10" : "border-slate-200"
+                    )}
+                    placeholder="Enter mandatory verification details, e.g. quality, quantity checks, damages, discrepancies..."
                   />
+                  {!notes.trim() && poId && (
+                    <div className="flex items-center gap-1.5 text-rose-600 text-[11px] font-bold mt-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      Verification note is required to record the PO in the inventory system.
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="p-8 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
                 <button 
                   type="submit"
-                  disabled={submitting || !poId || grnItems.length === 0}
-                  className="px-10 h-12 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-200"
+                  disabled={submitting || !poId || grnItems.length === 0 || !notes.trim()}
+                  className="px-10 h-12 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none shadow-lg shadow-blue-200"
                 >
                   {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                     <>

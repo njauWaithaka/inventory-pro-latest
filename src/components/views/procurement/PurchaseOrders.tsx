@@ -11,6 +11,13 @@ import { PurchaseOrder, POItem, Product, POStatus } from '../../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { ConfirmationModal } from '../../ConfirmationModal';
 
+interface ExtendedPOItem extends POItem {
+  isNewProduct?: boolean;
+  newProductName?: string;
+  newProductSku?: string;
+  newProductUom?: string;
+}
+
 export function PurchaseOrders() {
   const { user } = useAuth();
   const { profile, company, settings } = useSettings();
@@ -45,8 +52,12 @@ export function PurchaseOrders() {
 
   // New PO State
   const [supplierId, setSupplierId] = useState('');
+  const [newSupplierName, setNewSupplierName] = useState('');
+  const [newSupplierEmail, setNewSupplierEmail] = useState('');
+  const [newSupplierPhone, setNewSupplierPhone] = useState('');
+  const [newSupplierAddress, setNewSupplierAddress] = useState('');
   const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<POItem[]>([]);
+  const [items, setItems] = useState<ExtendedPOItem[]>([]);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(
     new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
@@ -214,30 +225,108 @@ export function PurchaseOrders() {
         setConfirmConfig(prev => ({ ...prev, isOpen: false }));
         console.log("Starting purchase order creation inside onConfirm callback...");
         try {
-          const totalAmount = items.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
-          const poNumber = `PO-${Math.floor(1000 + Math.random() * 9000)}`;
-          
-          console.log("Calculated total amount:", totalAmount, "PO Number:", poNumber);
-          
-          const selectedSupplier = suppliers.find(s => s.id === supplierId);
-          console.log("Selected supplier:", selectedSupplier);
-          
-          const mappedItems = items.map(item => {
-            const product = products.find(p => p.id === item.productId);
-            return {
-              productId: item.productId || '',
+          let finalSupplierId = supplierId;
+          let finalSupplierName = '';
+          let finalSupplierEmail = '';
+          let finalSupplierPhone = '';
+          let finalSupplierAddress = '';
+
+          // 1. Handle inline Supplier creation
+          if (supplierId === 'NEW') {
+            if (!newSupplierName.trim()) {
+              throw new Error("New supplier name is required.");
+            }
+            const suppId = `SUPP-${Date.now().toString().slice(-6)}`;
+            const suppPath = `companies/${profile.companyId}/suppliers`;
+            const suppRef = doc(db, suppPath, suppId);
+            const newSuppData = {
+              id: suppId,
+              name: newSupplierName.trim(),
+              email: newSupplierEmail.trim(),
+              phone: newSupplierPhone.trim(),
+              address: newSupplierAddress.trim(),
+              reliability: '100/100',
+              status: 'Excellent',
+              payable: 0,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            await setDoc(suppRef, newSuppData);
+            finalSupplierId = suppId;
+            finalSupplierName = newSuppData.name;
+            finalSupplierEmail = newSuppData.email;
+            finalSupplierPhone = newSuppData.phone;
+            finalSupplierAddress = newSuppData.address;
+          } else {
+            const selectedSupplier = suppliers.find(s => s.id === supplierId);
+            if (selectedSupplier) {
+              finalSupplierName = selectedSupplier.name || '';
+              finalSupplierEmail = selectedSupplier.email || '';
+              finalSupplierPhone = selectedSupplier.phone || '';
+              finalSupplierAddress = selectedSupplier.address || '';
+            }
+          }
+
+          // 2. Handle items and inline Products creation
+          const mappedItems = [];
+          for (const item of items) {
+            let finalProductId = item.productId;
+            let finalProductName = '';
+            let finalProductSku = '';
+
+            if (item.productId === 'NEW') {
+              if (!item.newProductName?.trim() || !item.newProductSku?.trim()) {
+                throw new Error("Product name and SKU are required for new inline products.");
+              }
+              const prodId = `prod_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+              const prodPath = `companies/${profile.companyId}/products`;
+              const prodRef = doc(db, prodPath, prodId);
+              const newProdData = {
+                id: prodId,
+                name: item.newProductName.trim(),
+                sku: item.newProductSku.trim(),
+                category: 'General',
+                quantity: 0,
+                value: 0,
+                movement: 'moderate',
+                uom: item.newProductUom || 'Piece',
+                materialGroup: 'Finished Goods',
+                buyingPrice: Number(item.unitPrice) || 0,
+                sellingPrice: (Number(item.unitPrice) || 0) * 1.5,
+                lastSold: new Date().toISOString().split('T')[0],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              };
+              await setDoc(prodRef, newProdData);
+              finalProductId = prodId;
+              finalProductName = newProdData.name;
+              finalProductSku = newProdData.sku;
+            } else {
+              const prod = products.find(p => p.id === item.productId);
+              if (prod) {
+                finalProductName = prod.name || '';
+                finalProductSku = prod.sku || '';
+              }
+            }
+
+            mappedItems.push({
+              productId: finalProductId || '',
               quantity: Number(item.quantity) || 0,
               unitPrice: Number(item.unitPrice) || 0,
               receivedQuantity: Number(item.receivedQuantity) || 0,
-              productName: product?.name || '',
-              sku: product?.sku || ''
-            };
-          });
-          console.log("Mapped items:", mappedItems);
+              productName: finalProductName,
+              sku: finalProductSku
+            });
+          }
+
+          const totalAmount = mappedItems.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
+          const poNumber = `PO-${Math.floor(1000 + Math.random() * 9000)}`;
+          
+          console.log("Calculated total amount:", totalAmount, "PO Number:", poNumber);
 
           const payload = {
             poNumber,
-            supplierId: supplierId || '',
+            supplierId: finalSupplierId || '',
             date: new Date().toISOString(),
             totalAmount: Number(totalAmount) || 0,
             status: 'PENDING' as POStatus,
@@ -247,10 +336,10 @@ export function PurchaseOrders() {
             createdBy: user?.uid || '',
             createdByName: user?.displayName || profile?.name || 'User',
             userEmail: user?.email || '',
-            supplierName: selectedSupplier?.name || '',
-            supplierEmail: selectedSupplier?.email || '',
-            supplierPhone: selectedSupplier?.phone || '',
-            supplierKraPin: selectedSupplier?.kraPin || ''
+            supplierName: finalSupplierName || '',
+            supplierEmail: finalSupplierEmail || '',
+            supplierPhone: finalSupplierPhone || '',
+            supplierKraPin: ''
           };
           console.log("Payload to ProcurementService.createPurchaseOrder:", payload);
 
@@ -259,6 +348,10 @@ export function PurchaseOrders() {
           
           setShowModal(false);
           setSupplierId('');
+          setNewSupplierName('');
+          setNewSupplierEmail('');
+          setNewSupplierPhone('');
+          setNewSupplierAddress('');
           setItems([]);
           setNotes('');
           setError(null);
@@ -450,110 +543,220 @@ export function PurchaseOrders() {
                   </div>
                 )}
                 
-                {suppliers.length === 0 || products.length === 0 ? (
-                  <div className="p-8 border border-amber-100 bg-amber-50 rounded-2xl text-left space-y-4 animate-in fade-in duration-300">
+                {suppliers.length === 0 && products.length === 0 && (
+                  <div className="p-6 border border-amber-100 bg-amber-50/50 rounded-2xl text-left space-y-3 animate-in fade-in duration-300">
                     <div className="flex items-start gap-3">
                       <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                       <div>
-                        <h4 className="font-extrabold text-amber-900 text-sm">Prerequisites Missing</h4>
-                        <p className="text-xs text-amber-700/90 mt-1 leading-relaxed">
-                          To place a purchase order, you need at least one supplier and one product configured. 
-                          Currently, your suppliers or products list is empty. 
-                          Click the button below to automatically seed high-quality demo suppliers and products so you can test this workflow immediately!
+                        <h4 className="font-extrabold text-amber-900 text-xs">No Data Seeded Yet</h4>
+                        <p className="text-[11px] text-amber-700 mt-1 leading-relaxed">
+                          You can click the button below to seed demo suppliers and products, or simply use the inline creation features below to add them directly.
                         </p>
                       </div>
                     </div>
-                    <div className="pt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleAutoSeed}
-                        disabled={submitting}
-                        className="px-5 h-10 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
-                      >
-                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Auto-Seed Demo Setup"}
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAutoSeed}
+                      disabled={submitting}
+                      className="px-4 h-9 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 disabled:opacity-50 transition-all"
+                    >
+                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Auto-Seed Demo Setup"}
+                    </button>
                   </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="text-left">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1.5 block">Supplier</label>
-                        <select 
-                          required
-                          value={supplierId}
-                          onChange={(e) => setSupplierId(e.target.value)}
-                          className="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                        >
-                          <option value="">Select Supplier</option>
-                          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </div>
-                      <div className="text-left">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1.5 block">Expected Delivery Date</label>
-                        <input 
-                          type="date"
-                          required
-                          value={expectedDeliveryDate}
-                          onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-                          className="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                        />
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="text-left space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block">Supplier</label>
+                    <select 
+                      required
+                      value={supplierId}
+                      onChange={(e) => setSupplierId(e.target.value)}
+                      className="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    >
+                      <option value="">Select Supplier</option>
+                      {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      <option value="NEW" className="text-blue-600 font-bold">+ Create New Supplier inline</option>
+                    </select>
+                  </div>
+                  <div className="text-left space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block">Expected Delivery Date</label>
+                    <input 
+                      type="date"
+                      required
+                      value={expectedDeliveryDate}
+                      onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                      className="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* Inline New Supplier Form */}
+                  {supplierId === 'NEW' && (
+                    <div className="col-span-1 md:col-span-2 p-5 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-4 text-left animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="text-[11px] font-bold text-blue-900 uppercase tracking-wider">New Supplier Details</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase block">Supplier Name *</label>
+                          <input 
+                            type="text"
+                            required={supplierId === 'NEW'}
+                            placeholder="Acme Corporation"
+                            value={newSupplierName}
+                            onChange={(e) => setNewSupplierName(e.target.value)}
+                            className="w-full h-10 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase block">Email Address</label>
+                          <input 
+                            type="email"
+                            placeholder="sales@acme.com"
+                            value={newSupplierEmail}
+                            onChange={(e) => setNewSupplierEmail(e.target.value)}
+                            className="w-full h-10 bg-white border border-slate-200 rounded-lg px-3 text-xs font-medium outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase block">Phone Number</label>
+                          <input 
+                            type="text"
+                            placeholder="+1 555-0199"
+                            value={newSupplierPhone}
+                            onChange={(e) => setNewSupplierPhone(e.target.value)}
+                            className="w-full h-10 bg-white border border-slate-200 rounded-lg px-3 text-xs font-medium outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase block">Physical Address</label>
+                          <input 
+                            type="text"
+                            placeholder="123 Industrial Parkway"
+                            value={newSupplierAddress}
+                            onChange={(e) => setNewSupplierAddress(e.target.value)}
+                            className="w-full h-10 bg-white border border-slate-200 rounded-lg px-3 text-xs font-medium outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
                       </div>
                     </div>
+                  )}
+                </div>
 
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Order Items</label>
-                        <button type="button" onClick={addItem} className="text-blue-600 text-[10px] font-bold uppercase tracking-widest hover:underline">+ Add Item</button>
-                      </div>
-                      
-                      <div className="space-y-3">
-                        {items.map((item, i) => (
-                          <div key={i} className="flex gap-3 items-end">
-                            <div className="flex-1 text-left">
-                              <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Product</label>
-                              <select 
-                                required
-                                value={item.productId}
-                                onChange={(e) => updateItem(i, 'productId', e.target.value)}
-                                className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold"
-                              >
-                                <option value="">Select Product</option>
-                                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                              </select>
-                            </div>
-                            <div className="w-24 text-left">
-                              <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Qty</label>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Order Items</label>
+                    <button type="button" onClick={addItem} className="text-blue-600 text-[10px] font-bold uppercase tracking-widest hover:underline">+ Add Item</button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {items.map((item, i) => (
+                      <div key={i} className="p-4 bg-slate-50/50 border border-slate-100 rounded-2xl space-y-3">
+                        <div className="flex gap-3 items-end">
+                          <div className="flex-1 text-left">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Product</label>
+                            <select 
+                              required
+                              value={item.productId}
+                              onChange={(e) => updateItem(i, 'productId', e.target.value)}
+                              className="w-full h-11 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                            >
+                              <option value="">Select Product</option>
+                              {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              <option value="NEW" className="text-blue-600 font-bold">+ Create New Product inline</option>
+                            </select>
+                          </div>
+                          <div className="w-24 text-left">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Qty</label>
+                            <input 
+                              type="number"
+                              required
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updateItem(i, 'quantity', parseInt(e.target.value))}
+                              className="w-full h-11 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-center focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                          </div>
+                          <div className="w-32 text-left">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Price</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{currency}</span>
                               <input 
                                 type="number"
                                 required
-                                min="1"
-                                value={item.quantity}
-                                onChange={(e) => updateItem(i, 'quantity', parseInt(e.target.value))}
-                                className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold"
+                                step="0.01"
+                                value={item.unitPrice}
+                                onChange={(e) => updateItem(i, 'unitPrice', parseFloat(e.target.value))}
+                                className="w-full h-11 bg-white border border-slate-200 rounded-xl pl-8 pr-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                               />
                             </div>
-                            <div className="w-32 text-left">
-                              <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Price</label>
-                              <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{currency}</span>
+                          </div>
+                          <button type="button" onClick={() => removeItem(i)} className="h-11 w-11 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Inline New Product Form */}
+                        {item.productId === 'NEW' && (
+                          <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-3 text-left animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider">New Product Details</div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase block">Product Name *</label>
                                 <input 
-                                  type="number"
-                                  required
-                                  step="0.01"
-                                  value={item.unitPrice}
-                                  onChange={(e) => updateItem(i, 'unitPrice', parseFloat(e.target.value))}
-                                  className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 text-xs font-bold"
+                                  type="text"
+                                  required={item.productId === 'NEW'}
+                                  placeholder="Premium Wireless Mouse"
+                                  value={item.newProductName || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = [...items];
+                                    updated[i] = {
+                                      ...updated[i],
+                                      newProductName: val,
+                                      newProductSku: item.newProductSku || `SKU-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 100)}`
+                                    };
+                                    setItems(updated);
+                                  }}
+                                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase block">SKU Code *</label>
+                                <input 
+                                  type="text"
+                                  required={item.productId === 'NEW'}
+                                  placeholder="MSE-099"
+                                  value={item.newProductSku || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = [...items];
+                                    updated[i] = { ...updated[i], newProductSku: val };
+                                    setItems(updated);
+                                  }}
+                                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-mono font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase block">Unit of Measure (UOM)</label>
+                                <input 
+                                  type="text"
+                                  placeholder="Piece"
+                                  value={item.newProductUom || 'Piece'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = [...items];
+                                    updated[i] = { ...updated[i], newProductUom: val };
+                                    setItems(updated);
+                                  }}
+                                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-medium outline-none focus:ring-1 focus:ring-indigo-500"
                                 />
                               </div>
                             </div>
-                            <button type="button" onClick={() => removeItem(i)} className="h-11 w-11 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
                           </div>
-                        ))}
+                        )}
                       </div>
-                    </div>
+                    ))}
+                  </div>
+                </div>
 
                     <div className="text-left">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1.5 block">Notes</label>
@@ -564,8 +767,6 @@ export function PurchaseOrders() {
                         placeholder="Internal notes or delivery instructions..."
                       />
                     </div>
-                  </>
-                )}
               </div>
 
               <div className="p-8 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
@@ -573,15 +774,13 @@ export function PurchaseOrders() {
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Amount</p>
                   <p className="text-2xl font-black text-slate-900">{currency}{items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0).toLocaleString()}</p>
                 </div>
-                {suppliers.length > 0 && products.length > 0 && (
-                  <button 
-                    type="submit"
-                    disabled={submitting || items.length === 0}
-                    className="px-10 h-12 bg-[#0f172a] text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirm Order"}
-                  </button>
-                )}
+                <button 
+                  type="submit"
+                  disabled={submitting || items.length === 0}
+                  className="px-10 h-12 bg-[#0f172a] text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirm Order"}
+                </button>
               </div>
             </form>
           </motion.div>

@@ -62,6 +62,7 @@ const menuItems = [
   { id: "dashboard" as ViewType, label: "Dashboard", icon: LayoutDashboard },
   { id: "pos" as ViewType, label: "POS", icon: ShoppingCart },
   { id: "inventory" as ViewType, label: "Inventory", icon: Package },
+  { id: "demand" as ViewType, label: "Demand", icon: TrendingUp },
   { id: "categories" as ViewType, label: "Categories", icon: Grid3X3 },
   { id: "warehouses" as ViewType, label: "Warehouses", icon: Warehouse },
 ];

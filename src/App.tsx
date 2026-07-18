@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { Sidebar, Navbar, BottomNav } from './components/layout/Navigation';
 import { Dashboard } from './components/views/Dashboard';
 import { Inventory } from './components/views/Inventory';
+import { Demand } from './components/views/Demand';
 import { Categories } from './components/views/Categories';
 import { Analytics } from './components/views/Analytics';
 import { Help } from './components/views/Help';
@@ -258,6 +259,7 @@ function AppContent() {
       case 'pos': return <POS />;
       case 'dashboard': return <Dashboard onNavigate={setCurrentView} />;
       case 'inventory': return <Inventory />;
+      case 'demand': return <Demand />;
       case 'categories': return <Categories />;
       case 'analytics': return <Analytics />;
       case 'invoices':

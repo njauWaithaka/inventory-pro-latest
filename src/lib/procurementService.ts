@@ -118,147 +118,149 @@ export class ProcurementService {
     };
 
     try {
-      await runTx(db, async (transaction) => {
-        // 1. Fetch current Purchase Order state to calculate partial receipt progression
-        const poRef = doc(db, poPath);
-        const poSnap = await transaction.get(poRef);
-        if (!poSnap.exists()) {
-          throw new Error("Source Purchase Order not found");
-        }
-        const po = poSnap.data() as PurchaseOrder;
+      // 1. Fetch current Purchase Order state to calculate partial receipt progression
+      const poRef = doc(db, poPath);
+      const poSnap = await getDoc(poRef);
+      if (!poSnap.exists()) {
+        throw new Error("Source Purchase Order not found");
+      }
+      const po = poSnap.data() as PurchaseOrder;
 
-        // Prevent duplicate additions or additions to a closed/received PO
-        if (po.status === 'RECEIVED' || po.status === 'FULLY RECEIVED' || po.status === 'CLOSED') {
-          throw new Error(`This Purchase Order is already marked as ${po.status}. Cannot receive any more items.`);
-        }
+      // Prevent duplicate additions or additions to a closed/received PO
+      if (po.status === 'RECEIVED' || po.status === 'FULLY RECEIVED' || po.status === 'CLOSED') {
+        throw new Error(`This Purchase Order is already marked as ${po.status}. Cannot receive any more items.`);
+      }
 
-        // Update the items array on the PO to include accumulated received quantities
-        const updatedPOItems = po.items.map(poItem => {
-          const grnItem = grnData.items.find(gi => gi.productId === poItem.productId);
-          if (grnItem) {
-            const prevReceived = poItem.receivedQuantity || 0;
-            const newTotalReceived = prevReceived + grnItem.receivedQuantity;
-            if (newTotalReceived > poItem.quantity) {
-              throw new Error(`Cannot receive more than the ordered quantity for product ${poItem.productName || poItem.productId}. Ordered: ${poItem.quantity}, Already received: ${prevReceived}, Trying to receive: ${grnItem.receivedQuantity}`);
-            }
-            return {
-              ...poItem,
-              receivedQuantity: newTotalReceived
-            };
+      // Update the items array on the PO to include accumulated received quantities
+      const updatedPOItems = po.items.map(poItem => {
+        const grnItem = grnData.items.find(gi => gi.productId === poItem.productId);
+        if (grnItem) {
+          const prevReceived = poItem.receivedQuantity || 0;
+          const newTotalReceived = prevReceived + grnItem.receivedQuantity;
+          if (newTotalReceived > poItem.quantity) {
+            throw new Error(`Cannot receive more than the ordered quantity for product ${poItem.productName || poItem.productId}. Ordered: ${poItem.quantity}, Already received: ${prevReceived}, Trying to receive: ${grnItem.receivedQuantity}`);
           }
-          return poItem;
-        });
-
-        // Determine PO status progression: PENDING -> PARTIALLY RECEIVED -> RECEIVED
-        const isFullyReceived = updatedPOItems.every(item => (item.receivedQuantity || 0) >= item.quantity);
-        const someReceived = updatedPOItems.some(item => (item.receivedQuantity || 0) > 0);
-        const poStatus: POStatus = isFullyReceived ? 'RECEIVED' : (someReceived ? 'PARTIALLY RECEIVED' : 'PENDING');
-
-        // Fetch all product snapshots that are being received
-        const productRefsAndSnaps = await Promise.all(
-          grnData.items
-            .filter(item => item.receivedQuantity > 0)
-            .map(async (item) => {
-              const productRef = doc(db, `${this.getCompanyPath(companyId)}/products/${item.productId}`);
-              const snap = await transaction.get(productRef);
-              return { item, productRef, snap };
-            })
-        );
-
-        // --- All reads are done! Now perform all writes ---
-
-        // Save GRN
-        transaction.set(grnRef, {
-          ...newGRN,
-          createdAt: serverTimestamp(),
-        });
-
-        // Record GRN Receipt in general auditLogs
-        const auditLogPath = `${this.getCompanyPath(companyId)}/auditLogs`;
-        const auditLogRef = doc(db, auditLogPath, generateAutoId());
-        transaction.set(auditLogRef, {
-          id: auditLogRef.id,
-          eventType: 'goods_received_note_created',
-          action: 'Goods Received (GRN)',
-          details: `Goods Received Note ${grnRef.id} (${newGRN.grnNumber}) created for PO ${grnData.poId} (Supplier ID: ${grnData.supplierId})`,
-          userId: grnData.createdBy || '',
-          userEmail: grnData.userEmail || '',
-          userName: grnData.receivedBy || 'User',
-          timestamp: new Date().toISOString(),
-          createdAt: serverTimestamp()
-        });
-
-        // Update each Product, write Stock Movement and write Inventory Transaction
-        for (const { item, productRef, snap } of productRefsAndSnaps) {
-          const productData = snap.exists() ? snap.data() as Product : null;
-          const beforeQty = productData?.quantity || 0;
-          const finalQty = beforeQty + item.receivedQuantity;
-
-          // Find the unit price from the Purchase Order for cost alignment
-          const poItem = po.items.find(pi => pi.productId === item.productId);
-          
-          const updateData: any = {
-            quantity: finalQty,
-            currentStock: finalQty,
-            unitsReceived: (productData?.unitsReceived || 0) + item.receivedQuantity,
-            updatedAt: new Date().toISOString(),
-            serverUpdatedAt: serverTimestamp(),
+          return {
+            ...poItem,
+            receivedQuantity: newTotalReceived
           };
+        }
+        return poItem;
+      });
 
-          if (poItem) {
-            updateData.buyingPrice = poItem.unitPrice;
-            updateData.value = poItem.unitPrice; // Keep value aligned with buyingPrice
-          }
+      // Determine PO status progression: PENDING -> PARTIALLY RECEIVED -> RECEIVED
+      const isFullyReceived = updatedPOItems.every(item => (item.receivedQuantity || 0) >= item.quantity);
+      const someReceived = updatedPOItems.some(item => (item.receivedQuantity || 0) > 0);
+      const poStatus: POStatus = isFullyReceived ? 'RECEIVED' : (someReceived ? 'PARTIALLY RECEIVED' : 'PENDING');
 
-          transaction.update(productRef, updateData);
+      // Fetch all product snapshots that are being received
+      const productRefsAndSnaps = await Promise.all(
+        grnData.items
+          .filter(item => item.receivedQuantity > 0)
+          .map(async (item) => {
+            const productRef = doc(db, `${this.getCompanyPath(companyId)}/products/${item.productId}`);
+            const snap = await getDoc(productRef);
+            return { item, productRef, snap };
+          })
+      );
 
-          // Record Stock Movement
-          const movementPath = `${this.getCompanyPath(companyId)}/stockMovements`;
-          const movementRef = doc(db, movementPath, generateAutoId());
-          transaction.set(movementRef, {
-            id: movementRef.id,
-            productId: item.productId,
-            type: 'purchase',
-            quantity: item.receivedQuantity,
-            beforeQty: beforeQty,
-            afterQty: finalQty,
-            createdAt: new Date().toISOString(),
-            reference: newGRN.grnNumber,
-            poId: grnData.poId,
+      // --- All reads are done! Now perform all writes using writeBatch ---
+      const batch = writeBatch(db);
 
-            // Target schema audit fields
-            transactionId: movementRef.id,
-            transactionType: "Stock In",
-            previousStock: beforeQty,
-            newStock: finalQty,
-            reason: `GRN Purchase Receipt - PO #${grnData.poId}`,
-            timestamp: serverTimestamp(),
-          });
+      // Save GRN
+      batch.set(grnRef, {
+        ...newGRN,
+        createdAt: serverTimestamp(),
+      });
 
-          // Create inventory transaction record: inventoryTransactions/{transactionId}
-          const inventoryTransactionPath = `${this.getCompanyPath(companyId)}/inventoryTransactions`;
-          const inventoryTransactionRef = doc(db, inventoryTransactionPath, generateAutoId());
-          transaction.set(inventoryTransactionRef, {
-            id: inventoryTransactionRef.id,
-            productId: item.productId,
-            quantity: item.receivedQuantity,
-            transactionType: 'Purchase Receipt',
-            poId: grnData.poId,
-            supplierId: po.supplierId || grnData.supplierId || '',
-            supplierName: po.supplierName || '',
-            userId: grnData.createdBy || '',
-            userName: grnData.receivedBy || 'User',
-            timestamp: serverTimestamp()
-          });
+      // Record GRN Receipt in general auditLogs
+      const auditLogPath = `${this.getCompanyPath(companyId)}/auditLogs`;
+      const auditLogRef = doc(db, auditLogPath, generateAutoId());
+      batch.set(auditLogRef, {
+        id: auditLogRef.id,
+        eventType: 'goods_received_note_created',
+        action: 'Goods Received (GRN)',
+        details: `Goods Received Note ${grnRef.id} (${newGRN.grnNumber}) created for PO ${grnData.poId} (Supplier ID: ${grnData.supplierId})`,
+        userId: grnData.createdBy || '',
+        userEmail: grnData.userEmail || '',
+        userName: grnData.receivedBy || 'User',
+        timestamp: new Date().toISOString(),
+        createdAt: serverTimestamp()
+      });
+
+      // Update each Product, write Stock Movement and write Inventory Transaction
+      for (const { item, productRef, snap } of productRefsAndSnaps) {
+        const productData = snap.exists() ? snap.data() as Product : null;
+        const beforeQty = productData?.quantity || 0;
+        const finalQty = beforeQty + item.receivedQuantity;
+
+        // Find the unit price from the Purchase Order for cost alignment
+        const poItem = po.items.find(pi => pi.productId === item.productId);
+        
+        const updateData: any = {
+          quantity: finalQty,
+          currentStock: finalQty,
+          unitsReceived: (productData?.unitsReceived || 0) + item.receivedQuantity,
+          updatedAt: new Date().toISOString(),
+          serverUpdatedAt: serverTimestamp(),
+        };
+
+        if (poItem) {
+          updateData.buyingPrice = poItem.unitPrice;
+          updateData.value = poItem.unitPrice; // Keep value aligned with buyingPrice
         }
 
-        // Update PO Status & item received quantity tracking
-        transaction.update(poRef, { 
-          status: poStatus,
-          items: updatedPOItems,
-          updatedAt: serverTimestamp()
+        batch.update(productRef, updateData);
+
+        // Record Stock Movement
+        const movementPath = `${this.getCompanyPath(companyId)}/stockMovements`;
+        const movementRef = doc(db, movementPath, generateAutoId());
+        batch.set(movementRef, {
+          id: movementRef.id,
+          productId: item.productId,
+          type: 'purchase',
+          quantity: item.receivedQuantity,
+          beforeQty: beforeQty,
+          afterQty: finalQty,
+          createdAt: new Date().toISOString(),
+          reference: newGRN.grnNumber,
+          poId: grnData.poId,
+
+          // Target schema audit fields
+          transactionId: movementRef.id,
+          transactionType: "Stock In",
+          previousStock: beforeQty,
+          newStock: finalQty,
+          reason: `GRN Purchase Receipt - PO #${grnData.poId}`,
+          timestamp: serverTimestamp(),
         });
+
+        // Create inventory transaction record: inventoryTransactions/{transactionId}
+        const inventoryTransactionPath = `${this.getCompanyPath(companyId)}/inventoryTransactions`;
+        const inventoryTransactionRef = doc(db, inventoryTransactionPath, generateAutoId());
+        batch.set(inventoryTransactionRef, {
+          id: inventoryTransactionRef.id,
+          productId: item.productId,
+          quantity: item.receivedQuantity,
+          transactionType: 'Purchase Receipt',
+          poId: grnData.poId,
+          supplierId: po.supplierId || grnData.supplierId || '',
+          supplierName: po.supplierName || '',
+          userId: grnData.createdBy || '',
+          userName: grnData.receivedBy || 'User',
+          timestamp: serverTimestamp()
+        });
+      }
+
+      // Update PO Status & item received quantity tracking
+      batch.update(poRef, { 
+        status: poStatus,
+        items: updatedPOItems,
+        updatedAt: serverTimestamp()
       });
+
+      // Commit the batch
+      await batch.commit();
 
       // Trigger Alert Synchronization to recalculate stock health instantly
       try {
