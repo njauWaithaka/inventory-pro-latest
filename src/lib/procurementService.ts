@@ -9,6 +9,15 @@ import { handleFirestoreError, OperationType } from './firestoreUtils';
 
 const runTx = (firestore as any).runTransaction;
 
+function generateAutoId(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let autoId = '';
+  for (let i = 0; i < 20; i++) {
+    autoId += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return autoId;
+}
+
 export class ProcurementService {
   private static getCompanyPath(companyId: string) {
     return `companies/${companyId}`;
@@ -16,7 +25,7 @@ export class ProcurementService {
 
   static async createPurchaseOrder(companyId: string, poData: Omit<PurchaseOrder, 'id'>) {
     const path = `${this.getCompanyPath(companyId)}/purchaseOrders`;
-    const poRef = doc(collection(db, path));
+    const poRef = doc(db, path, generateAutoId());
     
     // Calculate standard 16% VAT structures for compliance
     const totalAmount = poData.totalAmount || 0;
@@ -35,14 +44,18 @@ export class ProcurementService {
     };
 
     try {
+      console.log("Saving Purchase Order document to reference:", poRef.path, "data:", { ...newPO, createdAt: "serverTimestamp()" });
       // 1. Save the Purchase Order
       await setDoc(poRef, {
         ...newPO,
         createdAt: serverTimestamp(),
       });
+      console.log("Successfully saved Purchase Order document.");
 
       // 1.5 Record PO Creation in general auditLogs
-      const auditLogRef = doc(collection(db, `${this.getCompanyPath(companyId)}/auditLogs`));
+      const auditLogPath = `${this.getCompanyPath(companyId)}/auditLogs`;
+      const auditLogRef = doc(db, auditLogPath, generateAutoId());
+      console.log("Saving audit log to:", auditLogRef.path);
       await setDoc(auditLogRef, {
         id: auditLogRef.id,
         eventType: 'purchase_order_created',
@@ -53,24 +66,31 @@ export class ProcurementService {
         userName: poData.createdByName || 'User',
         timestamp: new Date().toISOString(),
         createdAt: serverTimestamp()
+      }).then(() => {
+        console.log("Successfully saved audit log.");
       }).catch(err => {
         console.warn("Audit log creation skipped:", err);
       });
 
       // 2. Update Supplier reference information
       const supplierRef = doc(db, `${this.getCompanyPath(companyId)}/suppliers/${poData.supplierId}`);
+      console.log("Updating supplier at:", supplierRef.path);
       await updateDoc(supplierRef, {
         lastPurchaseDate: new Date().toISOString(),
         payable: increment(totalAmount),
         poCount: increment(1),
         updatedAt: new Date().toISOString()
+      }).then(() => {
+        console.log("Successfully updated supplier doc.");
       }).catch(err => {
         // Log but don't crash if supplier doc doesn't exist yet
         console.warn("Supplier document update skipped:", err);
       });
 
+      console.log("Completed all createPurchaseOrder steps. Returning newPO:", newPO);
       return newPO as PurchaseOrder;
     } catch (error) {
+      console.error("Caught error in ProcurementService.createPurchaseOrder:", error);
       handleFirestoreError(error, OperationType.WRITE, path);
       throw error;
     }
@@ -89,7 +109,7 @@ export class ProcurementService {
   static async createGRN(companyId: string, grnData: Omit<GoodReceiptNote, 'id'>) {
     const path = `${this.getCompanyPath(companyId)}/grns`;
     const poPath = `${this.getCompanyPath(companyId)}/purchaseOrders/${grnData.poId}`;
-    const grnRef = doc(collection(db, path));
+    const grnRef = doc(db, path, generateAutoId());
     
     const newGRN: GoodReceiptNote = {
       ...grnData,
@@ -154,7 +174,8 @@ export class ProcurementService {
         });
 
         // Record GRN Receipt in general auditLogs
-        const auditLogRef = doc(collection(db, `${this.getCompanyPath(companyId)}/auditLogs`));
+        const auditLogPath = `${this.getCompanyPath(companyId)}/auditLogs`;
+        const auditLogRef = doc(db, auditLogPath, generateAutoId());
         transaction.set(auditLogRef, {
           id: auditLogRef.id,
           eventType: 'goods_received_note_created',
@@ -192,7 +213,8 @@ export class ProcurementService {
           transaction.update(productRef, updateData);
 
           // Record Stock Movement
-          const movementRef = doc(collection(db, `${this.getCompanyPath(companyId)}/stockMovements`));
+          const movementPath = `${this.getCompanyPath(companyId)}/stockMovements`;
+          const movementRef = doc(db, movementPath, generateAutoId());
           transaction.set(movementRef, {
             id: movementRef.id,
             productId: item.productId,
@@ -214,7 +236,8 @@ export class ProcurementService {
           });
 
           // Create inventory transaction record: inventoryTransactions/{transactionId}
-          const inventoryTransactionRef = doc(collection(db, `${this.getCompanyPath(companyId)}/inventoryTransactions`));
+          const inventoryTransactionPath = `${this.getCompanyPath(companyId)}/inventoryTransactions`;
+          const inventoryTransactionRef = doc(db, inventoryTransactionPath, generateAutoId());
           transaction.set(inventoryTransactionRef, {
             id: inventoryTransactionRef.id,
             productId: item.productId,
@@ -254,7 +277,7 @@ export class ProcurementService {
 
   static async createMROIssue(companyId: string, issueData: Omit<MROIssue, 'id'>) {
     const path = `${this.getCompanyPath(companyId)}/mro_issues`;
-    const issueRef = doc(collection(db, path));
+    const issueRef = doc(db, path, generateAutoId());
     
     const newIssue: MROIssue = {
       ...issueData,
@@ -286,7 +309,8 @@ export class ProcurementService {
       });
 
       // Record Stock Movement
-      const movementRef = doc(collection(db, `${this.getCompanyPath(companyId)}/stockMovements`));
+      const movementPath = `${this.getCompanyPath(companyId)}/stockMovements`;
+      const movementRef = doc(db, movementPath, generateAutoId());
       batch.set(movementRef, {
         id: movementRef.id,
         productId: issueData.productId,

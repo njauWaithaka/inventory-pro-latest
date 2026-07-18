@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Filter, Plus, FileX, Download, 
   ChevronDown, Calendar, User, DollarSign, 
-  ArrowDownRight, RefreshCcw, Loader2, X, Trash2, Package
+  ArrowDownRight, RefreshCcw, Loader2, X, Trash2, Package,
+  Eye, Printer, CheckCircle2, FileText
 } from 'lucide-react';
 import { collection, onSnapshot, setDoc, deleteDoc, doc, getDocs, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
@@ -14,8 +15,8 @@ import { handleFirestoreError, OperationType } from '../../../lib/firestoreUtils
 
 export function CreditNotes() {
   const { user } = useAuth();
-  const { profile, settings } = useSettings();
-  const currency = settings?.currency || 'KSh';
+  const { profile, company, settings } = useSettings();
+  const currency = settings?.currency || company?.currency || 'KSh';
   const [searchTerm, setSearchTerm] = useState('');
   const [credits, setCredits] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -23,6 +24,11 @@ export function CreditNotes() {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedCreditNote, setSelectedCreditNote] = useState<any | null>(null);
+
+  const handlePrintCreditNote = () => {
+    window.print();
+  };
 
   // Form State
   const [invoiceId, setInvoiceId] = useState('');
@@ -362,10 +368,18 @@ export function CreditNotes() {
                 <div className="text-right font-black text-rose-600 text-sm">
                   -{currency}{(cn_item.amount || 0).toLocaleString()}
                 </div>
-                <div className="flex justify-center">
+                <div className="flex justify-center gap-1">
+                  <button 
+                    onClick={() => setSelectedCreditNote(cn_item)}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-colors"
+                    title="View Credit Note Document"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
                   <button 
                     onClick={() => handleDeleteCredit(cn_item.id)}
                     className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-rose-600 transition-colors"
+                    title="Delete"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -392,11 +406,19 @@ export function CreditNotes() {
                          </p>
                        ) : null}
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <span className="font-black text-rose-600 text-sm">-{currency}{(cn_item.amount || 0).toLocaleString()}</span>
                       <button 
+                        onClick={() => setSelectedCreditNote(cn_item)}
+                        className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-colors"
+                        title="View Document"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button 
                         onClick={() => handleDeleteCredit(cn_item.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600"
+                        className="p-1 text-slate-400 hover:text-rose-600 font-bold"
+                        title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -557,6 +579,211 @@ export function CreditNotes() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Credit Note Document Viewer & Printable Modal */}
+      <AnimatePresence>
+        {selectedCreditNote && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedCreditNote(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <style>{`
+              @media print {
+                body {
+                  visibility: hidden !important;
+                }
+                #printable-credit-note-area, #printable-credit-note-area * {
+                  visibility: visible !important;
+                }
+                #printable-credit-note-area {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  background: white !important;
+                  color: black !important;
+                  box-shadow: none !important;
+                  border: none !important;
+                  padding: 20px !important;
+                  margin: 0 !important;
+                }
+              }
+            `}</style>
+            
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative bg-white rounded-[2rem] w-full max-w-4xl shadow-2xl border border-slate-200 overflow-hidden my-8 flex flex-col md:flex-row h-[85vh] z-10 text-left"
+            >
+              {/* Absolute Close button */}
+              <button
+                onClick={() => setSelectedCreditNote(null)}
+                className="absolute top-6 right-6 p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-full transition-colors z-20 border border-slate-100"
+                title="Close Viewer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Controls Panel */}
+              <div className="p-8 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col justify-between md:w-[320px] bg-slate-50 shrink-0">
+                <div className="space-y-6">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-800 rounded-full text-[10px] font-black uppercase tracking-widest">
+                      <FileText className="w-3 h-3" /> Credit Note Viewer
+                    </span>
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mt-3">Credit Note</h3>
+                    <p className="text-xs text-slate-500 font-semibold mt-1">Review Credit Note document. Ready for print or digital distribution.</p>
+                  </div>
+
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-800 font-bold text-[10px] uppercase tracking-widest">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Status: {selectedCreditNote.status || 'Approved'}
+                    </div>
+                    <p className="text-[10px] text-emerald-700 font-semibold leading-relaxed">
+                      This credit note is active. Associated inventory restock and accounting adjustments are completed.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-6 border-t border-slate-100">
+                  <button
+                    onClick={handlePrintCreditNote}
+                    className="w-full h-12 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-md"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Print Credit Note
+                  </button>
+                  <button
+                    onClick={() => setSelectedCreditNote(null)}
+                    className="w-full h-12 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
+                  >
+                    Close Viewer
+                  </button>
+                </div>
+              </div>
+
+              {/* A4 Document Preview */}
+              <div className="flex-1 bg-slate-100 p-6 overflow-y-auto no-scrollbar flex justify-center items-start">
+                <div 
+                  id="printable-credit-note-area" 
+                  className="bg-white shadow-lg border border-slate-200 w-full max-w-[650px] p-10 text-xs text-left text-slate-900 font-sans"
+                >
+                  {/* Logo and Credit Note Title */}
+                  <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
+                    <div>
+                      <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">{company?.name || 'INVENTORYPRO CO.'}</h1>
+                      <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">{company?.address || 'Nairobi, Kenya'}</p>
+                      <p className="text-slate-500 font-semibold text-[10px]">{company?.phone || '+254 700 000 000'}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="inline-block px-4 py-1.5 bg-red-600 text-white font-black text-sm uppercase tracking-widest">Credit Note</span>
+                      <p className="text-xs font-mono font-bold text-slate-700 mt-2">CREDIT NO: {selectedCreditNote.noteId || selectedCreditNote.id}</p>
+                    </div>
+                  </div>
+
+                  {/* Buyer & Refund Details */}
+                  <div className="py-6 grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Buyer Details</h4>
+                      <div className="text-[11px] space-y-1">
+                        <p className="font-bold text-slate-900 text-sm">{selectedCreditNote.customer}</p>
+                        <p className="font-semibold text-slate-600">Reference Invoice: <strong className="text-slate-800 font-mono">{selectedCreditNote.invoiceId}</strong></p>
+                        <p className="text-slate-600">Status: <strong className="text-emerald-600 uppercase font-black">{selectedCreditNote.status || 'Approved'}</strong></p>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 font-sans">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Refund Reference</h4>
+                      <div className="text-[11px] space-y-1 text-right">
+                        <p className="font-semibold text-slate-600">Date of Issue: <strong className="text-slate-800 font-bold">{selectedCreditNote.date}</strong></p>
+                        <p className="font-semibold text-slate-600">Reason: <strong className="text-rose-600 font-bold uppercase text-[10px] tracking-wider">{selectedCreditNote.reason}</strong></p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Items Table */}
+                  <div className="py-2 border-t border-slate-100">
+                    <table className="w-full text-left text-[11px]">
+                      <thead>
+                        <tr className="border-b border-slate-900 text-slate-500 font-black uppercase text-[10px] tracking-wider">
+                          <th className="pb-3 text-left">Returned Product / Service</th>
+                          <th className="pb-3 text-left">SKU</th>
+                          <th className="pb-3 text-center">Returned Qty</th>
+                          <th className="pb-3 text-right">Unit Price</th>
+                          <th className="pb-3 text-right">Total Refunded</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {selectedCreditNote.returnedItems && selectedCreditNote.returnedItems.length > 0 ? (
+                          selectedCreditNote.returnedItems.map((item: any, i: number) => (
+                            <tr key={i} className="text-slate-800 font-medium">
+                              <td className="py-4 font-bold text-slate-900">{item.name}</td>
+                              <td className="py-4 font-mono text-[10px] text-slate-500">{item.sku || 'N/A'}</td>
+                              <td className="py-4 text-center font-black text-rose-600">x{item.quantity}</td>
+                              <td className="py-4 text-right font-semibold">{currency}{(item.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                              <td className="py-4 text-right font-black text-slate-900">{currency}{((item.price || 0) * (item.quantity || 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                          ))
+                        ) : selectedCreditNote.productName ? (
+                          <tr className="text-slate-800 font-medium">
+                            <td className="py-4 font-bold text-slate-900">{selectedCreditNote.productName}</td>
+                            <td className="py-4 font-mono text-[10px] text-slate-500">N/A</td>
+                            <td className="py-4 text-center font-black text-rose-600">x{selectedCreditNote.quantity || 1}</td>
+                            <td className="py-4 text-right font-semibold">
+                              {currency}{(selectedCreditNote.amount / (selectedCreditNote.quantity || 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-4 text-right font-black text-slate-900">{currency}{(selectedCreditNote.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        ) : (
+                          <tr className="text-slate-800 font-medium">
+                            <td className="py-4 font-bold text-slate-900">General Adjustment Refund</td>
+                            <td className="py-4 font-mono text-[10px] text-slate-500">N/A</td>
+                            <td className="py-4 text-center font-black text-rose-600">x1</td>
+                            <td className="py-4 text-right font-semibold">{currency}{(selectedCreditNote.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="py-4 text-right font-black text-slate-900">{currency}{(selectedCreditNote.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Summary & Signoff */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-end pt-6 border-t border-slate-200 mt-4 gap-4">
+                    <div className="text-[10px] text-slate-500 leading-relaxed max-w-xs text-left">
+                      <p className="font-bold text-slate-700">Notice to Recipient:</p>
+                      <p>This Credit Note is issued to record the return of the items listed above. This credit can be applied against outstanding or future invoices.</p>
+                    </div>
+                    <div className="space-y-1 text-right w-full max-w-xs">
+                      <div className="flex justify-between text-slate-500 text-[11px] font-semibold">
+                        <span>Subtotal (Refund Base)</span>
+                        <span>{currency}{(selectedCreditNote.amount * 0.862068).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500 text-[11px] font-semibold">
+                        <span>VAT Adjustments (16%)</span>
+                        <span>{currency}{(selectedCreditNote.amount * 0.137931).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-900 text-sm font-black pt-2 border-t-2 border-slate-900">
+                        <span>Total Credited Amount</span>
+                        <span>{currency}{(selectedCreditNote.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-12 pt-8 border-t border-dashed border-slate-200 flex justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                     <div>Authorized Signature: _______________________</div>
+                     <div>Date: {selectedCreditNote.date}</div>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

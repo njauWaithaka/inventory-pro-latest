@@ -19,20 +19,39 @@ export function ProcurementHub() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!profile?.companyId) return;
+    if (!profile?.companyId) {
+      console.log("ProcurementHub.tsx useEffect: No profile or companyId found yet.", profile);
+      return;
+    }
     
     const poPath = `companies/${profile.companyId}/purchaseOrders`;
+    console.log("ProcurementHub.tsx useEffect: Subscribing to purchase orders path:", poPath);
     const unsubscribePOs = onSnapshot(collection(db, poPath), (snapshot) => {
-      setPurchaseOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseOrder)));
+      console.log("ProcurementHub.tsx snapshot listener triggered! PO count:", snapshot.docs.length);
+      const orders = snapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log("ProcurementHub.tsx found PO doc in snapshot:", doc.id, data);
+        return { id: doc.id, ...data } as PurchaseOrder;
+      });
+      setPurchaseOrders(orders);
+      setLoading(false);
+    }, (err) => {
+      console.error("ProcurementHub.tsx snapshot listener error:", err);
       setLoading(false);
     });
 
     const suppliersPath = `companies/${profile.companyId}/suppliers`;
+    console.log("ProcurementHub.tsx useEffect: Subscribing to suppliers path:", suppliersPath);
     const unsubscribeSuppliers = onSnapshot(collection(db, suppliersPath), (snapshot) => {
-      setSuppliers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const sups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log("ProcurementHub.tsx suppliers snapshot update. Supplier count:", sups.length);
+      setSuppliers(sups);
+    }, (err) => {
+      console.error("ProcurementHub.tsx suppliers listener error:", err);
     });
 
     return () => {
+      console.log("ProcurementHub.tsx useEffect cleanup: unsubscribing from listeners for companyId =", profile.companyId);
       unsubscribePOs();
       unsubscribeSuppliers();
     };
@@ -45,9 +64,9 @@ export function ProcurementHub() {
 
   const stats = [
     { label: 'Total Orders', value: purchaseOrders.length.toString(), icon: ClipboardList, color: 'text-slate-900', bg: 'bg-slate-50' },
-    { label: 'Pending Approval', value: `${currency}${purchaseOrders.filter(p => p.status === 'PENDING').reduce((s, p) => s + p.totalAmount, 0).toLocaleString()}`, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50' },
-    { label: 'Approved Value', value: `${currency}${purchaseOrders.filter(p => p.status === 'APPROVED').reduce((s, p) => s + p.totalAmount, 0).toLocaleString()}`, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { label: 'Total Value', value: `${currency}${purchaseOrders.reduce((s, p) => s + p.totalAmount, 0).toLocaleString()}`, icon: DollarSign, color: 'text-blue-500', bg: 'bg-blue-50' },
+    { label: 'Pending Approval', value: `${currency}${purchaseOrders.filter(p => p.status === 'PENDING').reduce((s, p) => s + (p.totalAmount || 0), 0).toLocaleString()}`, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50' },
+    { label: 'Approved Value', value: `${currency}${purchaseOrders.filter(p => p.status === 'APPROVED').reduce((s, p) => s + (p.totalAmount || 0), 0).toLocaleString()}`, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+    { label: 'Total Value', value: `${currency}${purchaseOrders.reduce((s, p) => s + (p.totalAmount || 0), 0).toLocaleString()}`, icon: DollarSign, color: 'text-blue-500', bg: 'bg-blue-50' },
   ];
 
   if (loading) {
