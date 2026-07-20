@@ -41,6 +41,8 @@ import {
   Clock,
   DollarSign,
   Sparkles,
+  Scale,
+  Calendar,
 } from "lucide-react";
 import { ViewType, Product } from "../../types";
 import { cn } from "../../lib/utils";
@@ -114,11 +116,16 @@ const menuGroups = [
     icon: Factory,
     children: [
       { id: "bom" as ViewType, label: "Bills of Materials", icon: Boxes },
-      {
-        id: "production_orders" as ViewType,
-        label: "Production Orders",
-        icon: Factory,
-      },
+      { id: "production_planning" as ViewType, label: "Production Planning", icon: Calendar },
+      { id: "mrp" as ViewType, label: "Material Requirements (MRP)", icon: Scale },
+      { id: "material_requisitions" as ViewType, label: "Material Requisitions", icon: FileText },
+      { id: "material_issue" as ViewType, label: "Material Issue", icon: ClipboardList },
+      { id: "production_orders" as ViewType, label: "Production Orders", icon: Factory },
+      { id: "wip" as ViewType, label: "Work In Progress (WIP)", icon: Layers },
+      { id: "production_output" as ViewType, label: "Production Output", icon: Package },
+      { id: "quality_control" as ViewType, label: "Quality Control", icon: ShieldCheck },
+      { id: "cost_analysis" as ViewType, label: "Cost Analysis", icon: DollarSign },
+      { id: "production_analytics" as ViewType, label: "Production Analytics", icon: BarChart3 },
     ],
   },
   {
@@ -140,9 +147,7 @@ const menuGroups = [
     icon: TrendingUp,
     children: [
       { id: "analytics" as ViewType, label: "Analytics", icon: BarChart3 },
-      { id: "spend_analysis" as ViewType, label: "Spend Analysis", icon: Layers },
       { id: "profit_tracking" as ViewType, label: "Profit Tracking", icon: DollarSign },
-      { id: "forecast" as ViewType, label: "Forecast", icon: LineChart },
       { id: "reports" as ViewType, label: "Reports", icon: FileText },
       { id: "warranties" as ViewType, label: "Warranties", icon: ShieldCheck },
       { id: "expiry_tracking" as ViewType, label: "Expiry Tracking", icon: Clock },

@@ -150,8 +150,8 @@ export interface MROIssue {
 export type ViewType = 
   | 'pos' | 'dashboard' | 'inventory' | 'demand' | 'categories' | 'analytics' | 'settings' 
   | 'invoices' | 'receipts' | 'delivery_notes' | 'credit_notes' | 'quotations' | 'proforma'
-  | 'warehouses' | 'supplier' | 'reports' | 'warranties' | 'alerts' | 'expiry_tracking' | 'profit_tracking' | 'spend_analysis'
+  | 'warehouses' | 'supplier' | 'reports' | 'warranties' | 'alerts' | 'expiry_tracking' | 'profit_tracking'
   | 'purchase_orders' | 'grn' | 'mro_issues' | 'procurement_hub'
-  | 'bom' | 'production_orders'
+  | 'bom' | 'production_orders' | 'production_planning' | 'mrp' | 'material_requisitions' | 'material_issue' | 'wip' | 'production_output' | 'quality_control' | 'cost_analysis' | 'production_analytics'
   | 'customers' | 'suppliers'
   | 'help' | 'inventory_pro_chat';

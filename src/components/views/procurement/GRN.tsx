@@ -8,7 +8,7 @@ import { useSettings } from '../../../contexts/SettingsContext';
 import { cn, formatCompactNumber } from '../../../lib/utils';
 import { ProcurementService } from '../../../lib/procurementService';
 import { GoodReceiptNote, PurchaseOrder, Product, GRNItem } from '../../../types';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export function GRN() {
   const { user } = useAuth();
@@ -21,6 +21,7 @@ export function GRN() {
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [selectedGRN, setSelectedGRN] = useState<GoodReceiptNote | null>(null);
 
   // New GRN State
   const [poId, setPoId] = useState('');
@@ -215,9 +216,12 @@ export function GRN() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                 <button className="flex items-center gap-2 px-3 h-9 border border-slate-200 rounded-lg bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-[10px] uppercase tracking-widest">
+                 <button 
+                   onClick={() => setSelectedGRN(grn)}
+                   className="flex items-center gap-2 px-3.5 h-9 border border-slate-200 rounded-lg bg-white text-slate-700 font-bold hover:bg-slate-50 hover:border-slate-300 transition-all text-[10px] uppercase tracking-widest cursor-pointer"
+                 >
                    <Printer className="w-3.5 h-3.5" />
-                   Print
+                   View / Print
                  </button>
               </div>
             </div>
@@ -366,6 +370,206 @@ export function GRN() {
           </motion.div>
         </div>
       )}
+
+      <AnimatePresence>
+        {selectedGRN && (() => {
+          const po = purchaseOrders.find(p => p.id === selectedGRN.poId);
+          const supplier = suppliers.find(s => s.id === (selectedGRN.supplierId || po?.supplierId));
+          const supplierName = po?.supplierName || supplier?.name || 'Unknown Supplier';
+          
+          return (
+            <div className="fixed inset-0 z-[110] flex justify-center items-start overflow-y-auto bg-slate-900/60 backdrop-blur-sm p-4 print:p-0 print:bg-white print:static print:overflow-visible">
+              <style>{`
+                @media print {
+                  body * {
+                    visibility: hidden !important;
+                  }
+                  #printable-grn-area, #printable-grn-area * {
+                    visibility: visible !important;
+                  }
+                  #printable-grn-area {
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100% !important;
+                    background: white !important;
+                    padding: 0 !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                    margin: 0 !important;
+                  }
+                }
+              `}</style>
+
+              {/* Control panel buttons - hidden when printing */}
+              <div className="fixed top-4 right-4 flex items-center gap-3 z-50 print:hidden bg-slate-900/85 p-2.5 rounded-2xl backdrop-blur-md shadow-2xl border border-slate-700/30">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg text-xs uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" /> Print GRN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedGRN(null)}
+                  className="bg-white hover:bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl font-bold shadow-lg text-xs uppercase tracking-wider border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <X className="w-4 h-4" /> Close
+                </button>
+              </div>
+
+              {/* A4 Paper container */}
+              <div 
+                id="printable-grn-area"
+                className="bg-white w-full max-w-[820px] my-8 p-10 shadow-2xl rounded-sm border border-slate-200 font-sans text-slate-800 leading-relaxed text-left print:shadow-none print:border-none print:my-0 print:p-0 print:w-full select-text"
+              >
+                {/* Outer boundary double border frame */}
+                <div className="border-[2px] border-double border-slate-900/30 p-8 min-h-[1050px] flex flex-col justify-between bg-white">
+                  <div>
+                    {/* Header: Company and Doc Title */}
+                    <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
+                      <div>
+                        <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
+                          {profile?.companyName || 'INVENTORYPRO CO.'}
+                        </h1>
+                        <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px] mt-1">
+                          {profile?.address || 'Nairobi, Kenya'}
+                        </p>
+                        <p className="text-slate-500 font-semibold text-[10px]">
+                          Tel: {profile?.phone || '+254 700 000 000'} | Email: {user?.email || 'procurement@inventorypro.com'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-block px-4 py-1.5 bg-slate-900 text-white font-black text-sm uppercase tracking-widest">
+                          Goods Received Note
+                        </span>
+                        <p className="text-xs font-mono font-bold text-slate-700 mt-2">
+                          GRN NO: {selectedGRN.grnNumber}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Metadata boxes */}
+                    <div className="grid grid-cols-2 gap-8 py-6 border-b border-slate-100">
+                      {/* Left: Supplier Details */}
+                      <div>
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Supplier Details</h4>
+                        <div className="space-y-1 text-xs">
+                          <p className="font-extrabold text-slate-900 text-sm">{supplierName}</p>
+                          {supplier?.email && <p className="text-slate-600">Email: <span className="font-bold text-slate-800">{supplier.email}</span></p>}
+                          {supplier?.phone && <p className="text-slate-600">Phone: <span className="font-bold text-slate-800">{supplier.phone}</span></p>}
+                          {supplier?.address && <p className="text-slate-600">Address: <span className="font-semibold text-slate-700">{supplier.address}</span></p>}
+                        </div>
+                      </div>
+
+                      {/* Right: Receipt & Reference Info */}
+                      <div>
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Receipt & References</h4>
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div>
+                            <p className="text-slate-400 font-semibold uppercase text-[9px] tracking-wider">Date Received</p>
+                            <p className="font-black text-slate-800 mt-0.5">{new Date(selectedGRN.receivedDate).toLocaleDateString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-slate-400 font-semibold uppercase text-[9px] tracking-wider">Received By</p>
+                            <p className="font-black text-slate-800 mt-0.5">{selectedGRN.receivedBy}</p>
+                          </div>
+                          <div>
+                            <p className="text-slate-400 font-semibold uppercase text-[9px] tracking-wider">Source PO Ref</p>
+                            <p className="font-mono font-bold text-blue-600 mt-0.5">{po?.poNumber || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-slate-400 font-semibold uppercase text-[9px] tracking-wider">PO Order Date</p>
+                            <p className="font-bold text-slate-800 mt-0.5">{po?.date ? new Date(po.date).toLocaleDateString() : 'N/A'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Table of Items */}
+                    <div className="py-6">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-900 text-slate-500 font-black uppercase text-[10px] tracking-wider">
+                            <th className="pb-3 text-left w-12">S/N</th>
+                            <th className="pb-3 text-left">Product Details</th>
+                            <th className="pb-3 text-left">SKU</th>
+                            <th className="pb-3 text-center">Ordered Qty</th>
+                            <th className="pb-3 text-center">Received Qty</th>
+                            <th className="pb-3 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {selectedGRN.items?.map((item, index) => {
+                            const product = products.find(p => p.id === item.productId);
+                            const discrepancy = item.orderedQuantity - item.receivedQuantity;
+                            return (
+                              <tr key={index} className="text-slate-800 font-medium">
+                                <td className="py-4 font-mono text-[11px]">{index + 1}</td>
+                                <td className="py-4">
+                                  <p className="font-bold text-slate-900 text-xs">{product?.name || 'Unknown Product'}</p>
+                                </td>
+                                <td className="py-4 font-mono text-[10px] text-slate-500">{product?.sku || 'N/A'}</td>
+                                <td className="py-4 text-center font-bold text-slate-500">{item.orderedQuantity}</td>
+                                <td className="py-4 text-center font-black text-slate-900">{item.receivedQuantity}</td>
+                                <td className="py-4 text-center">
+                                  {discrepancy <= 0 ? (
+                                    <span className="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-100 text-[9px] font-black uppercase tracking-wider">
+                                      Fully Recv
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-100 text-[9px] font-black uppercase tracking-wider">
+                                      Shortfall: {discrepancy}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Verification Notes */}
+                    {selectedGRN.notes && (
+                      <div className="mt-4 p-5 bg-slate-50 border border-slate-100 rounded-2xl">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Verification Remarks & Quality Check</h4>
+                        <p className="text-xs font-semibold text-slate-700 leading-relaxed">{selectedGRN.notes}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Signatures Footer */}
+                  <div className="pt-12 border-t border-slate-100">
+                    <div className="grid grid-cols-3 gap-8 text-[11px] text-slate-500">
+                      <div>
+                        <p className="font-bold text-slate-400 uppercase tracking-wider text-[9px]">Received By (Storeman)</p>
+                        <div className="border-b border-slate-300 h-10 mt-2"></div>
+                        <p className="mt-2 font-black text-slate-800">{selectedGRN.receivedBy}</p>
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-400 uppercase tracking-wider text-[9px]">Verified By (Inspector)</p>
+                        <div className="border-b border-slate-300 h-10 mt-2"></div>
+                        <p className="mt-2 font-semibold text-slate-400">Signature / Date</p>
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-400 uppercase tracking-wider text-[9px]">Authorizing Manager Stamp</p>
+                        <div className="border-b border-slate-300 h-10 mt-2"></div>
+                        <p className="mt-2 font-semibold text-slate-400">Stamp & Signature</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-12 text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                      Powered by InventoryPro Cloud
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }

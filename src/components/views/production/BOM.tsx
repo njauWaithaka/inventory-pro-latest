@@ -589,7 +589,7 @@ export function BOM() {
       {/* Header bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Bill of Materials Redesign</h2>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Bills of Materials</h2>
           <p className="text-slate-500 text-sm font-semibold mt-1">Configure manufacturing recipes, track recursive cost roll-ups, and run inventory deductions.</p>
         </div>
 

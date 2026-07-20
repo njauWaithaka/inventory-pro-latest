@@ -30,6 +30,8 @@ interface ProfitDetails {
 export function ProfitTracking() {
   const { profile, currency } = useSettings();
   const [dbProducts, setDbProducts] = useState<any[]>([]);
+  const [dbInvoices, setDbInvoices] = useState<any[]>([]);
+  const [dbStockMovements, setDbStockMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Controls
@@ -41,7 +43,7 @@ export function ProfitTracking() {
   const [costReduction, setCostReduction] = useState<number>(0); // percentage change: -30% to +10%
   const [volumeAdjustment, setVolumeAdjustment] = useState<number>(0); // percentage change: -20% to +50%
 
-  // Pull products from Firestore
+  // Pull products, invoices, and stock movements from Firestore
   useEffect(() => {
     if (!profile?.companyId) {
       setLoading(false);
@@ -56,15 +58,41 @@ export function ProfitTracking() {
           id: d.id,
         }));
         setDbProducts(list);
-        setLoading(false);
       },
       (error) => {
         console.error("Error loading products for profit tracking:", error);
+      }
+    );
+
+    const invoicesPath = `companies/${profile.companyId}/invoices`;
+    const unsubscribeInvoices = onSnapshot(
+      collection(db, invoicesPath),
+      (snapshot) => {
+        setDbInvoices(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
+      },
+      (error) => {
+        console.error("Error loading invoices for profit tracking:", error);
+      }
+    );
+
+    const movementsPath = `companies/${profile.companyId}/stockMovements`;
+    const unsubscribeMovements = onSnapshot(
+      collection(db, movementsPath),
+      (snapshot) => {
+        setDbStockMovements(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error loading movements for profit tracking:", error);
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubscribeInvoices();
+      unsubscribeMovements();
+    };
   }, [profile?.companyId]);
 
   // Use live database products
@@ -77,35 +105,26 @@ export function ProfitTracking() {
     return products.map((p) => {
       const name = p.name || 'Unnamed Product';
       const category = p.category || 'General';
-      const sellingPrice = p.value || p.price || 120;
       
-      // Compute realistic Cost of Goods (COGS) & Profit Margins dynamically
-      // Categories determine typical margin rates
-      let profitMargin = 25; // default margin %
-      const catLower = category.toLowerCase();
-      const nameLower = name.toLowerCase();
-
-      if (catLower.includes('chemical')) {
-        profitMargin = 38;
-      } else if (catLower.includes('electronic') || nameLower.includes('pro') || nameLower.includes('widget')) {
-        profitMargin = 32;
-      } else if (catLower.includes('construction') || nameLower.includes('cement') || nameLower.includes('steel')) {
-        profitMargin = 14;
-      } else if (catLower.includes('food') || catLower.includes('consumable')) {
-        profitMargin = 20;
-      }
-
-      const costOfGoods = Math.round(sellingPrice * (1 - (profitMargin / 100)));
+      // Determine real dynamic buying and selling prices from product data
+      const costOfGoods = p.buyingPrice || p.value || (p.sellingPrice ? Math.round(p.sellingPrice / 1.3) : 92);
+      const sellingPrice = p.sellingPrice || p.price || (costOfGoods ? Math.round(costOfGoods * 1.3) : 120);
       const netProfit = sellingPrice - costOfGoods;
+      const profitMargin = sellingPrice > 0 ? Math.round((netProfit / sellingPrice) * 100) : 0;
       
-      // High variety mock volume levels matching warehouse velocity
-      let volume = 150;
-      if (p.quantity) {
-        volume = Math.max(20, Math.floor(p.quantity * 1.5));
-      } else {
-        const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        volume = 30 + (hash % 120);
-      }
+      // Dynamic real-time sales volume based on invoice entries and stock movements
+      const salesFromInvoices = dbInvoices
+        .filter(inv => inv.status === 'paid' || inv.status === 'sent')
+        .flatMap(inv => inv.items || [])
+        .filter((item: any) => item.productId === p.id)
+        .reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+
+      const salesFromMovements = dbStockMovements
+        .filter(mov => mov.productId === p.id && mov.type === 'sale')
+        .reduce((sum: number, mov: any) => sum + (Math.abs(Number(mov.quantity)) || 0), 0);
+
+      // Total units sold dynamically calculated from actual transactions
+      const volume = Math.max(p.unitsSold || 0, salesFromInvoices, salesFromMovements);
 
       return {
         name,
@@ -118,7 +137,7 @@ export function ProfitTracking() {
         volume
       };
     });
-  }, [products]);
+  }, [products, dbInvoices, dbStockMovements]);
 
   // Unique categories list
   const categories = useMemo(() => {

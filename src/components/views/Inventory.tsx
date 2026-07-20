@@ -34,8 +34,22 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { cn, formatCompactNumber, getSellThroughRate, getProductMovementSpeed } from "../../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
-import { MovementSpeed, Product } from "../../types";
+import { MovementSpeed, Product, PurchaseOrder } from "../../types";
 import { ConfirmationModal } from "../ConfirmationModal";
+import {
+  TrendingUp,
+  TrendingDown,
+  Calendar as LucideCalendar,
+  DollarSign,
+  Activity,
+  ArrowRightLeft,
+  Truck,
+  History,
+  FileText,
+  Clock,
+  ArrowUpRight,
+  ShoppingCart
+} from "lucide-react";
 
 const BRANCHES = [
   { id: "main-wh", name: "Main Warehouse", location: "Building A, Industrial Zone" },
@@ -101,6 +115,33 @@ export function Inventory() {
   const [movements, setMovements] = useState<any[]>([]);
   const [movementsLoading, setMovementsLoading] = useState(true);
   const [selectedProductDetail, setSelectedProductDetail] = useState<Product | null>(null);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [purchaseOrdersLoading, setPurchaseOrdersLoading] = useState(true);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+
+    const path = `companies/${profile.companyId}/purchaseOrders`;
+    const q = collection(db, path);
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const docs = snapshot.docs.map((doc) => ({
+          ...doc.data(),
+          id: doc.id,
+        })) as PurchaseOrder[];
+        setPurchaseOrders(docs);
+        setPurchaseOrdersLoading(false);
+      },
+      (error) => {
+        console.error("Error loading purchase orders in inventory view:", error);
+        setPurchaseOrdersLoading(false);
+      },
+    );
+
+    return unsubscribe;
+  }, [profile?.companyId]);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -890,10 +931,10 @@ export function Inventory() {
               initial={{ scale: 0.95, y: 10 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 10 }}
-              className="bg-white w-full max-w-lg rounded-2xl border border-slate-200 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+              className="bg-white w-full max-w-4xl rounded-2xl border border-slate-200 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             >
               {/* Header */}
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/50">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 border border-blue-100">
                     <Package className="w-5 h-5" />
@@ -909,265 +950,572 @@ export function Inventory() {
                 </div>
                 <button
                   onClick={() => setSelectedProductDetail(null)}
-                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all"
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
                 >
                   <X className="w-5 h-5 animate-none" />
                 </button>
               </div>
 
-              {/* Scrollable Content */}
-              <div className="p-6 space-y-6 overflow-y-auto">
-                {/* 1. Quantitative Block */}
-                <div className="grid grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                  <div>
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
-                      Current Stock
-                    </span>
-                    <span className={cn(
-                      "text-xl font-black",
-                      selectedProductDetail.quantity <= (selectedProductDetail.reorderPoint ?? selectedProductDetail.minStock ?? 10) ? "text-rose-600" : "text-slate-900"
-                    )}>
-                      {selectedProductDetail.quantity.toLocaleString()} <span className="text-xs font-semibold text-slate-400">({selectedProductDetail.uom || "pcs"})</span>
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
-                      Total Valuation
-                    </span>
-                    <span className="text-xl font-black text-indigo-600">
-                      {currency} {(selectedProductDetail.value * selectedProductDetail.quantity).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="pt-2 border-t border-slate-100">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
-                      Cost per Unit
-                    </span>
-                    <span className="text-xs font-bold text-slate-700">
-                      {currency} {parseFloat(selectedProductDetail.value as any || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="pt-2 border-t border-slate-100">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
-                      Velocity Score
-                    </span>
-                    <span className={cn(
-                      "inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider py-0.5 px-2 rounded-md",
-                      selectedProductDetail.movement === 'fast' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
-                      selectedProductDetail.movement === 'moderate' ? "bg-blue-50 text-blue-600 border border-blue-100" :
-                      selectedProductDetail.movement === 'slow' ? "bg-amber-50 text-amber-600 border border-amber-100" :
-                      "bg-rose-50 text-rose-600 border border-rose-100 animate-pulse"
-                    )}>
-                      {selectedProductDetail.movement || "moderate"}
-                    </span>
+              {/* Scrollable Grid Container */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+                
+                {/* LEFT COLUMN: Basic Info, Taxonomy, Compliance & Reorder Point (lg:col-span-5) */}
+                <div className="lg:col-span-5 space-y-6 pr-1 border-r border-slate-100/80">
+                  
+                  {/* 1. Quantitative Block */}
+                  <div className="grid grid-cols-2 gap-4 bg-slate-50/60 p-4 rounded-xl border border-slate-100">
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
+                        Current Stock
+                      </span>
+                      <span className={cn(
+                        "text-xl font-black",
+                        selectedProductDetail.quantity <= (selectedProductDetail.reorderPoint ?? selectedProductDetail.minStock ?? 10) ? "text-rose-600" : "text-slate-900"
+                      )}>
+                        {selectedProductDetail.quantity.toLocaleString()} <span className="text-xs font-semibold text-slate-400">({selectedProductDetail.uom || "pcs"})</span>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
+                        Total Valuation
+                      </span>
+                      <span className="text-xl font-black text-indigo-600">
+                        {currency} {(selectedProductDetail.value * selectedProductDetail.quantity).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
+                        Cost per Unit
+                      </span>
+                      <span className="text-xs font-bold text-slate-700">
+                        {currency} {parseFloat(selectedProductDetail.value as any || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
+                        Velocity Score
+                      </span>
+                      <span className={cn(
+                        "inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider py-0.5 px-2 rounded-md",
+                        selectedProductDetail.movement === 'fast' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
+                        selectedProductDetail.movement === 'moderate' ? "bg-blue-50 text-blue-600 border border-blue-100" :
+                        selectedProductDetail.movement === 'slow' ? "bg-amber-50 text-amber-600 border border-amber-100" :
+                        "bg-rose-50 text-rose-600 border border-rose-100 animate-pulse"
+                      )}>
+                        {selectedProductDetail.movement || "moderate"}
+                      </span>
+                    </div>
+
+                    {/* STR Info block */}
+                    <div className="pt-2 border-t border-slate-100 col-span-2 flex flex-col gap-1">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
+                        Sell-Through Metric (STR)
+                      </span>
+                      {(() => {
+                        const str = getSellThroughRate(selectedProductDetail);
+                        const sold = selectedProductDetail.unitsSold || 0;
+                        const received = selectedProductDetail.unitsReceived || (selectedProductDetail.quantity + sold);
+                        return (
+                          <div className="bg-white p-2.5 rounded-lg border border-slate-150 flex flex-col gap-1.5 mt-0.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-slate-700">Sell-Through Rate:</span>
+                              <span className={cn(
+                                "font-black font-mono px-2 py-0.5 rounded text-[10px]",
+                                str >= 70 ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
+                                str >= 40 ? "bg-blue-50 text-blue-600 border border-blue-100" :
+                                "bg-amber-50 text-amber-600 border border-amber-100"
+                              )}>
+                                {str.toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div 
+                                className={cn(
+                                  "h-full rounded-full transition-all duration-300",
+                                  str >= 70 ? "bg-emerald-500" : str >= 40 ? "bg-blue-500" : "bg-amber-500"
+                                )}
+                                style={{ width: `${Math.min(100, str)}%` }}
+                              />
+                            </div>
+                            <div className="flex justify-between text-[9px] font-bold text-slate-400 mt-0.5">
+                              <span>Sold: <span className="text-slate-800">{sold} units</span></span>
+                              <span>Received: <span className="text-slate-800">{received} units</span></span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
 
-                  {/* STR Info block */}
-                  <div className="pt-2 border-t border-slate-100 col-span-2 flex flex-col gap-1">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
-                      Sell-Through Metric (STR)
-                    </span>
-                    {(() => {
-                      const str = getSellThroughRate(selectedProductDetail);
-                      const sold = selectedProductDetail.unitsSold || 0;
-                      const received = selectedProductDetail.unitsReceived || (selectedProductDetail.quantity + sold);
-                      return (
-                        <div className="bg-white p-2.5 rounded-lg border border-slate-150 flex flex-col gap-1.5 mt-0.5">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-slate-700">Sell-Through Rate:</span>
-                            <span className={cn(
-                              "font-black font-mono px-2 py-0.5 rounded text-[10px]",
-                              str >= 70 ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
-                              str >= 40 ? "bg-blue-50 text-blue-600 border border-blue-100" :
-                              "bg-amber-50 text-amber-600 border border-amber-100"
-                            )}>
-                              {str.toFixed(1)}%
+                  {/* 2. Location details */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
+                      Warehousing & Placement
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Branch / Facility</span>
+                        <span className="text-xs font-semibold text-slate-800">
+                          {BRANCHES.find(b => b.id === (selectedProductDetail.warehouseId || "main-wh"))?.name || BRANCHES[0].name}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Precise Location</span>
+                        <span className="text-xs font-semibold text-slate-500 italic">
+                          {BRANCHES.find(b => b.id === (selectedProductDetail.warehouseId || "main-wh"))?.location || BRANCHES[0].location}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Product Characteristics & Taxonomy */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
+                      Classification & Logistics
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Material Group</span>
+                        <span className="text-xs font-semibold text-slate-800">
+                          {selectedProductDetail.materialGroup || "Finished Goods"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Base Unit of Measure</span>
+                        <span className="text-xs font-semibold text-slate-800">
+                          {selectedProductDetail.uom || "Piece"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Traceability & Manufacturing */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
+                      Compliance & Traceability
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Batch / Lot Number</span>
+                        <span className="text-xs font-mono font-bold text-slate-700">
+                          {selectedProductDetail.batchNumber || "UNBATCHED"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Manufacture Date</span>
+                        <span className="text-xs font-semibold text-slate-700">
+                          {selectedProductDetail.manufactureDate || "Not Recorded"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Expiry Status</span>
+                        <div className="mt-1">
+                          {selectedProductDetail.expiryDate ? (() => {
+                            const today = new Date();
+                            today.setHours(0,0,0,0);
+                            const exp = new Date(selectedProductDetail.expiryDate);
+                            exp.setHours(0,0,0,0);
+                            const diff = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                            if (diff < 0) {
+                              return <span className="bg-rose-50 text-rose-600 border border-rose-100 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded">Expired</span>;
+                            } else if (diff <= 30) {
+                              return <span className="bg-amber-50 text-amber-600 border border-amber-100 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded">Near Expiry</span>;
+                            } else {
+                              return <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded">Fresh</span>;
+                            }
+                          })() : <span className="text-xs font-semibold text-slate-400">Non-Perishable</span>}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Expiration Date</span>
+                        <span className="text-xs font-semibold text-slate-700">
+                          {selectedProductDetail.expiryDate || "Infinite Lifecycle"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reorder Threshold Override Section */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
+                      Reorder point & alerts
+                    </h4>
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-3">
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Average Daily Sales (ADS)</span>
+                          <span className="font-bold text-slate-800">{(selectedProductDetail as any).averageDailySales ? (selectedProductDetail as any).averageDailySales.toFixed(2) : "0.00"} / day</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Auto Reorder Point</span>
+                          <span className="font-bold text-slate-800">{(selectedProductDetail as any).calculatedReorderPoint || 0} units</span>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-slate-200">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                          Manual Override Threshold (Units)
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="No override set"
+                          defaultValue={(selectedProductDetail as any).manualReorderPoint !== undefined && (selectedProductDetail as any).manualReorderPoint !== null ? (selectedProductDetail as any).manualReorderPoint : ""}
+                          onBlur={async (e) => {
+                            const val = e.target.value === "" ? null : Number(e.target.value);
+                            try {
+                              if (!profile?.companyId) return;
+                              const pRef = doc(db, `companies/${profile.companyId}/products`, selectedProductDetail.id);
+                              await updateDoc(pRef, {
+                                manualReorderPoint: val
+                              });
+                              // Also trigger the AlertSync!
+                              const { AlertService } = await import('../../lib/alertService');
+                              await AlertService.runAlertSync(profile.companyId);
+                              // Update local state to reflect override immediately
+                              setSelectedProductDetail(prev => prev ? {
+                                ...prev,
+                                manualReorderPoint: val === null ? undefined : val,
+                                minStock: val === null ? (prev as any).calculatedReorderPoint || 0 : val
+                              } : null);
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }}
+                          className="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold"
+                        />
+                        <p className="text-[9px] text-slate-400 mt-1 font-medium">
+                          Leave blank to use the automatically calculated reorder point.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Registered / Last Updated */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
+                      System Registry Logs
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Registered At</span>
+                        <span className="text-[11px] font-mono font-medium text-slate-400">
+                          {selectedProductDetail.createdAt ? new Date(selectedProductDetail.createdAt).toLocaleString() : "--"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Last Updated</span>
+                        <span className="text-[11px] font-mono font-medium text-slate-400">
+                          {selectedProductDetail.updatedAt ? new Date(selectedProductDetail.updatedAt).toLocaleString() : "--"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* RIGHT COLUMN: Lifecycle Insights, Analytics Cards Grid & Stock Movement Timeline (lg:col-span-7) */}
+                <div className="lg:col-span-7 space-y-6">
+                  
+                  {/* Title Header */}
+                  <div className="flex items-center gap-2 pb-1 border-b border-slate-100 shrink-0">
+                    <Activity className="w-4 h-4 text-indigo-600" />
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">
+                      Product Lifecycle & Stock Insights
+                    </h4>
+                  </div>
+
+                  {(() => {
+                    // Extract and format product-specific movements
+                    const prodMovements = movements.filter((m: any) => m.productId === selectedProductDetail.id);
+                    
+                    const getMovementDetails = (mov: any) => {
+                      let delta = 0;
+                      if (typeof mov.afterQty === 'number' && typeof mov.beforeQty === 'number') {
+                        delta = mov.afterQty - mov.beforeQty;
+                      } else {
+                        const typeLower = (mov.type || '').toLowerCase();
+                        const reasonLower = (mov.reason || '').toLowerCase();
+                        const isOut = typeLower === 'sale' || typeLower === 'outbound' || reasonLower.includes('sale') || reasonLower.includes('sold') || reasonLower.includes('damage') || reasonLower.includes('expir') || reasonLower.includes('scrap');
+                        delta = isOut ? -Math.abs(mov.quantity) : Math.abs(mov.quantity);
+                      }
+
+                      const typeLower = (mov.type || '').toLowerCase();
+                      const reasonLower = (mov.reason || '').toLowerCase();
+
+                      let category: 'sale' | 'restock' | 'transfer' | 'expired' | 'damaged' | 'adjustment' = 'adjustment';
+
+                      if (typeLower === 'sale' || reasonLower.includes('sale') || reasonLower.includes('sold') || reasonLower.includes('invoice') || reasonLower.includes('pos')) {
+                        category = 'sale';
+                      } else if (typeLower === 'purchase' || reasonLower.includes('restock') || reasonLower.includes('replenish') || reasonLower.includes('purchase') || reasonLower.includes('receive') || reasonLower.includes('grn') || reasonLower.includes('inbound')) {
+                        category = 'restock';
+                      } else if (typeLower === 'transfer' || reasonLower.includes('transfer')) {
+                        category = 'transfer';
+                      } else if (reasonLower.includes('expir') || reasonLower.includes('spoil')) {
+                        category = 'expired';
+                      } else if (reasonLower.includes('damag') || reasonLower.includes('scrap') || reasonLower.includes('waste') || reasonLower.includes('defect')) {
+                        category = 'damaged';
+                      }
+
+                      return { delta, category };
+                    };
+
+                    // Compute aggregates
+                    let totalSalesQty = 0;
+                    let lastSaleDate: string | null = null;
+                    let totalReceivedQty = 0;
+                    let lastRestockDate: string | null = null;
+                    let totalTransferredQty = 0;
+                    let totalExpiredQty = 0;
+                    let totalDamagedQty = 0;
+
+                    prodMovements.forEach((mov: any) => {
+                      const { delta, category } = getMovementDetails(mov);
+                      const mDate = mov.createdAt || mov.timestamp?.toDate?.()?.toISOString() || '';
+
+                      if (category === 'sale') {
+                        totalSalesQty += Math.abs(delta || mov.quantity || 0);
+                        if (!lastSaleDate || new Date(mDate) > new Date(lastSaleDate)) {
+                          lastSaleDate = mDate;
+                        }
+                      } else if (category === 'restock') {
+                        totalReceivedQty += Math.abs(delta || mov.quantity || 0);
+                        if (!lastRestockDate || new Date(mDate) > new Date(lastRestockDate)) {
+                          lastRestockDate = mDate;
+                        }
+                      } else if (category === 'transfer') {
+                        totalTransferredQty += Math.abs(delta || mov.quantity || 0);
+                      } else if (category === 'expired') {
+                        totalExpiredQty += Math.abs(delta || mov.quantity || 0);
+                      } else if (category === 'damaged') {
+                        totalDamagedQty += Math.abs(delta || mov.quantity || 0);
+                      }
+                    });
+
+                    // Compute reordered from POs
+                    let reorderedQty = 0;
+                    purchaseOrders.forEach((po) => {
+                      const activeStatuses = ['PENDING', 'APPROVED', 'SHIPPED', 'PARTIAL', 'PARTIALLY RECEIVED'];
+                      if (activeStatuses.includes(po.status?.toUpperCase())) {
+                        po.items?.forEach((item) => {
+                          if (item.productId === selectedProductDetail.id) {
+                            const needed = (item.quantity || 0) - (item.receivedQuantity || 0);
+                            if (needed > 0) {
+                              reorderedQty += needed;
+                            }
+                          }
+                        });
+                      }
+                    });
+
+                    return (
+                      <>
+                        {/* 2x3 Grid of Analytical Insights */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {/* 1. Sales */}
+                          <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-xl flex flex-col justify-between min-h-[85px] hover:shadow-sm transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black text-blue-500 uppercase tracking-wider">Total Sales</span>
+                              <ShoppingCart className="w-4 h-4 text-blue-500" />
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-base font-black text-slate-800">{totalSalesQty.toLocaleString()}</span>
+                              <span className="text-[10px] font-semibold text-slate-400 ml-1">{selectedProductDetail.uom || "pcs"}</span>
+                            </div>
+                            <span className="text-[8px] font-bold text-slate-400 mt-0.5 truncate block">
+                              Last Sold: {lastSaleDate ? new Date(lastSaleDate).toLocaleDateString() : 'Never'}
                             </span>
                           </div>
-                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div 
-                              className={cn(
-                                "h-full rounded-full transition-all duration-300",
-                                str >= 70 ? "bg-emerald-500" : str >= 40 ? "bg-blue-500" : "bg-amber-500"
-                              )}
-                              style={{ width: `${Math.min(100, str)}%` }}
-                            />
+
+                          {/* 2. Restocks */}
+                          <div className="p-3 bg-emerald-50/40 border border-emerald-100 rounded-xl flex flex-col justify-between min-h-[85px] hover:shadow-sm transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black text-emerald-600 uppercase tracking-wider">Total Restocked</span>
+                              <Truck className="w-4 h-4 text-emerald-600" />
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-base font-black text-slate-800">{totalReceivedQty.toLocaleString()}</span>
+                              <span className="text-[10px] font-semibold text-slate-400 ml-1">{selectedProductDetail.uom || "pcs"}</span>
+                            </div>
+                            <span className="text-[8px] font-bold text-slate-400 mt-0.5 truncate block">
+                              Last Restock: {lastRestockDate ? new Date(lastRestockDate).toLocaleDateString() : 'Never'}
+                            </span>
                           </div>
-                          <div className="flex justify-between text-[9px] font-bold text-slate-400 mt-0.5">
-                            <span>Sold: <span className="text-slate-800">{sold} units</span></span>
-                            <span>Received: <span className="text-slate-800">{received} units</span></span>
+
+                          {/* 3. Reordered */}
+                          <div className="p-3 bg-amber-50/40 border border-amber-100 rounded-xl flex flex-col justify-between min-h-[85px] hover:shadow-sm transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black text-amber-600 uppercase tracking-wider">On-Order (PO)</span>
+                              <Clock className="w-4 h-4 text-amber-500" />
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-base font-black text-slate-800">{reorderedQty.toLocaleString()}</span>
+                              <span className="text-[10px] font-semibold text-slate-400 ml-1">{selectedProductDetail.uom || "pcs"}</span>
+                            </div>
+                            <span className="text-[8px] font-bold text-slate-400 mt-0.5 block">
+                              Pending Purchase Orders
+                            </span>
+                          </div>
+
+                          {/* 4. Transfers */}
+                          <div className="p-3 bg-purple-50/40 border border-purple-100 rounded-xl flex flex-col justify-between min-h-[85px] hover:shadow-sm transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black text-purple-600 uppercase tracking-wider">Transfers</span>
+                              <ArrowRightLeft className="w-4 h-4 text-purple-600" />
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-base font-black text-slate-800">{totalTransferredQty.toLocaleString()}</span>
+                              <span className="text-[10px] font-semibold text-slate-400 ml-1">{selectedProductDetail.uom || "pcs"}</span>
+                            </div>
+                            <span className="text-[8px] font-bold text-slate-400 mt-0.5 block">
+                              Inter-Branch Transfers
+                            </span>
+                          </div>
+
+                          {/* 5. Expired */}
+                          <div className="p-3 bg-rose-50/40 border border-rose-100 rounded-xl flex flex-col justify-between min-h-[85px] hover:shadow-sm transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black text-rose-600 uppercase tracking-wider">Expired / Disposed</span>
+                              <LucideCalendar className="w-4 h-4 text-rose-500" />
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-base font-black text-slate-800">{totalExpiredQty.toLocaleString()}</span>
+                              <span className="text-[10px] font-semibold text-slate-400 ml-1">{selectedProductDetail.uom || "pcs"}</span>
+                            </div>
+                            <span className="text-[8px] font-bold text-slate-400 mt-0.5 block">
+                              Expiry Loss Write-Offs
+                            </span>
+                          </div>
+
+                          {/* 6. Damaged */}
+                          <div className="p-3 bg-orange-50/40 border border-orange-100 rounded-xl flex flex-col justify-between min-h-[85px] hover:shadow-sm transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black text-orange-600 uppercase tracking-wider">Damaged Stock</span>
+                              <Trash2 className="w-4 h-4 text-orange-500" />
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-base font-black text-slate-800">{totalDamagedQty.toLocaleString()}</span>
+                              <span className="text-[10px] font-semibold text-slate-400 ml-1">{selectedProductDetail.uom || "pcs"}</span>
+                            </div>
+                            <span className="text-[8px] font-bold text-slate-400 mt-0.5 block">
+                              Scrapped & Waste Loss
+                            </span>
                           </div>
                         </div>
-                      );
-                    })()}
-                  </div>
-                </div>
 
-                {/* 2. Location details */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
-                    Warehousing & Placement
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Branch / Facility</span>
-                      <span className="text-xs font-semibold text-slate-800">
-                        {BRANCHES.find(b => b.id === (selectedProductDetail.warehouseId || "main-wh"))?.name || BRANCHES[0].name}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Precise Location</span>
-                      <span className="text-xs font-semibold text-slate-500 italic">
-                        {BRANCHES.find(b => b.id === (selectedProductDetail.warehouseId || "main-wh"))?.location || BRANCHES[0].location}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                        {/* Interactive stock movement timeline ledger */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                              <History className="w-3.5 h-3.5 text-slate-400" />
+                              Historical Stock Movements Ledger ({prodMovements.length})
+                            </h5>
+                          </div>
 
-                {/* 3. Product Characteristics & Taxonomy */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
-                    Classification & Logistics
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Material Group</span>
-                      <span className="text-xs font-semibold text-slate-800">
-                        {selectedProductDetail.materialGroup || "Finished Goods"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Base Unit of Measure</span>
-                      <span className="text-xs font-semibold text-slate-800">
-                        {selectedProductDetail.uom || "Piece"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                          <div className="border border-slate-150 rounded-xl overflow-hidden bg-slate-50/30">
+                            <div className="max-h-[300px] overflow-y-auto pr-1">
+                              {prodMovements.length === 0 ? (
+                                <div className="p-8 text-center flex flex-col items-center justify-center">
+                                  <Activity className="w-8 h-8 text-slate-300 mb-2 animate-none" />
+                                  <p className="text-xs text-slate-500 font-bold">No recorded stock movements</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">Use Adjust or Transfer stock to log inventory actions</p>
+                                </div>
+                              ) : (
+                                <div className="divide-y divide-slate-100 bg-white">
+                                  {prodMovements.map((mov: any) => {
+                                    const { delta, category } = getMovementDetails(mov);
+                                    
+                                    // Style config depending on category
+                                    let style = {
+                                      iconBg: "bg-slate-50 border-slate-100 text-slate-500",
+                                      icon: <FileText className="w-3.5 h-3.5" />,
+                                      badgeClass: "bg-slate-50 text-slate-600 border-slate-100",
+                                      title: "Manual Stock Adjustment",
+                                    };
 
-                {/* 4. Traceability & Manufacturing */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
-                    Compliance & Traceability
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Batch / Lot Number</span>
-                      <span className="text-xs font-mono font-bold text-slate-700">
-                        {selectedProductDetail.batchNumber || "UNBATCHED"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Manufacture Date</span>
-                      <span className="text-xs font-semibold text-slate-700">
-                        {selectedProductDetail.manufactureDate || "Not Recorded"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Expiry Status</span>
-                      <div className="mt-1">
-                        {selectedProductDetail.expiryDate ? (() => {
-                          const today = new Date();
-                          today.setHours(0,0,0,0);
-                          const exp = new Date(selectedProductDetail.expiryDate);
-                          exp.setHours(0,0,0,0);
-                          const diff = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                          if (diff < 0) {
-                            return <span className="bg-rose-50 text-rose-600 border border-rose-100 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded">Expired</span>;
-                          } else if (diff <= 30) {
-                            return <span className="bg-amber-50 text-amber-600 border border-amber-100 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded">Near Expiry</span>;
-                          } else {
-                            return <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded">Fresh</span>;
-                          }
-                        })() : <span className="text-xs font-semibold text-slate-400">Non-Perishable</span>}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Expiration Date</span>
-                      <span className="text-xs font-semibold text-slate-700">
-                        {selectedProductDetail.expiryDate || "Infinite Lifecycle"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                                    if (category === 'sale') {
+                                      style = {
+                                        iconBg: "bg-blue-50 border-blue-100 text-blue-600",
+                                        icon: <ShoppingCart className="w-3.5 h-3.5" />,
+                                        badgeClass: "bg-blue-50 text-blue-600 border-blue-100",
+                                        title: "Customer Sale Outbound",
+                                      };
+                                    } else if (category === 'restock') {
+                                      style = {
+                                        iconBg: "bg-emerald-50 border-emerald-100 text-emerald-600",
+                                        icon: <Truck className="w-3.5 h-3.5" />,
+                                        badgeClass: "bg-emerald-50 text-emerald-600 border-emerald-100",
+                                        title: "Inventory Stock Restock",
+                                      };
+                                    } else if (category === 'transfer') {
+                                      style = {
+                                        iconBg: "bg-purple-50 border-purple-100 text-purple-600",
+                                        icon: <ArrowRightLeft className="w-3.5 h-3.5" />,
+                                        badgeClass: "bg-purple-50 text-purple-600 border-purple-100",
+                                        title: "Inter-Branch Stock Transfer",
+                                      };
+                                    } else if (category === 'expired') {
+                                      style = {
+                                        iconBg: "bg-rose-50 border-rose-100 text-rose-600",
+                                        icon: <Clock className="w-3.5 h-3.5" />,
+                                        badgeClass: "bg-rose-50 text-rose-600 border-rose-100",
+                                        title: "Expiry Disposal Write-off",
+                                      };
+                                    } else if (category === 'damaged') {
+                                      style = {
+                                        iconBg: "bg-orange-50 border-orange-100 text-orange-600",
+                                        icon: <AlertTriangle className="w-3.5 h-3.5" />,
+                                        badgeClass: "bg-orange-50 text-orange-600 border-orange-100",
+                                        title: "Damaged Stock Write-off",
+                                      };
+                                    }
 
-                {/* Reorder Threshold Override Section */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
-                    Reorder point & alerts
-                  </h4>
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-3">
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Average Daily Sales (ADS)</span>
-                        <span className="font-bold text-slate-800">{(selectedProductDetail as any).averageDailySales ? (selectedProductDetail as any).averageDailySales.toFixed(2) : "0.00"} / day</span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Auto Reorder Point</span>
-                        <span className="font-bold text-slate-800">{(selectedProductDetail as any).calculatedReorderPoint || 0} units</span>
-                      </div>
-                    </div>
-                    <div className="pt-2 border-t border-slate-200">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-                        Manual Override Threshold (Units)
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="No override set"
-                        defaultValue={(selectedProductDetail as any).manualReorderPoint !== undefined && (selectedProductDetail as any).manualReorderPoint !== null ? (selectedProductDetail as any).manualReorderPoint : ""}
-                        onBlur={async (e) => {
-                          const val = e.target.value === "" ? null : Number(e.target.value);
-                          try {
-                            if (!profile?.companyId) return;
-                            const pRef = doc(db, `companies/${profile.companyId}/products`, selectedProductDetail.id);
-                            await updateDoc(pRef, {
-                              manualReorderPoint: val
-                            });
-                            // Also trigger the AlertSync!
-                            const { AlertService } = await import('../../lib/alertService');
-                            await AlertService.runAlertSync(profile.companyId);
-                            // Update local state to reflect override immediately
-                            setSelectedProductDetail(prev => prev ? {
-                              ...prev,
-                              manualReorderPoint: val === null ? undefined : val,
-                              minStock: val === null ? (prev as any).calculatedReorderPoint || 0 : val
-                            } : null);
-                          } catch (err) {
-                            console.error(err);
-                          }
-                        }}
-                        className="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold"
-                      />
-                      <p className="text-[9px] text-slate-400 mt-1 font-medium">
-                        Leave blank to use the automatically calculated reorder point.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                                    const isPositive = delta > 0;
 
-                {/* 5. Logs & System Fields */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pb-1 border-b border-slate-100">
-                    System Registry Logs
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Registered At</span>
-                      <span className="text-[11px] font-mono font-medium text-slate-400">
-                        {selectedProductDetail.createdAt ? new Date(selectedProductDetail.createdAt).toLocaleString() : "--"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Last Updated</span>
-                      <span className="text-[11px] font-mono font-medium text-slate-400">
-                        {selectedProductDetail.updatedAt ? new Date(selectedProductDetail.updatedAt).toLocaleString() : "--"}
-                      </span>
-                    </div>
-                  </div>
+                                    return (
+                                      <div key={mov.id} className="p-3.5 hover:bg-slate-50/50 transition-colors flex items-start gap-3.5">
+                                        <div className={cn("w-8 h-8 rounded-lg shrink-0 border flex items-center justify-center shadow-sm", style.iconBg)}>
+                                          {style.icon}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <p className="text-xs font-extrabold text-slate-800 truncate">{style.title}</p>
+                                            <span className={cn(
+                                              "text-xs font-black font-mono px-2 py-0.5 rounded border shadow-sm shrink-0",
+                                              isPositive ? "bg-emerald-50 text-emerald-700 border-emerald-150" : "bg-rose-50 text-rose-700 border-rose-150"
+                                            )}>
+                                              {isPositive ? "+" : "-"}{Math.abs(mov.quantity || 0).toLocaleString()}
+                                            </span>
+                                          </div>
+                                          <p className="text-[10px] text-slate-500 font-bold mt-1 bg-slate-50 p-1.5 rounded border border-slate-100 italic">
+                                            "{mov.reason || "No notes recorded"}"
+                                          </p>
+                                          <div className="flex flex-wrap items-center justify-between text-[9px] font-bold text-slate-400 mt-2 gap-x-4 gap-y-1">
+                                            <span className="font-mono text-slate-400">
+                                              Ledger: <span className="text-slate-600">{mov.beforeQty ?? 0}</span> → <span className="text-slate-800 font-bold">{mov.afterQty ?? 0}</span> {selectedProductDetail.uom || "pcs"}
+                                            </span>
+                                            <span className="flex items-center gap-1.5">
+                                              <span className="text-slate-500 font-semibold">{mov.createdBy || "staff"}</span>
+                                              <span>•</span>
+                                              <span>{mov.createdAt ? new Date(mov.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '--'}</span>
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
                 </div>
               </div>
 
               {/* Footer Actions */}
-              <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-wrap gap-2 shrink-0">
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-wrap gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -1176,12 +1524,14 @@ export function Inventory() {
                       quantity: selectedProductDetail.quantity,
                       reason: "manual",
                       customReason: "",
+                      imageString: "",
                     });
                     setIsAdjustingStock(true);
                     setSelectedProductDetail(null);
                   }}
-                  className="flex-1 min-w-[120px] h-11 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
+                  className="flex-1 min-w-[120px] h-11 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-2"
                 >
+                  <Plus className="w-3.5 h-3.5" />
                   Adjust Stock
                 </button>
                 <button
@@ -1199,14 +1549,15 @@ export function Inventory() {
                     setIsTransferringStock(true);
                     setSelectedProductDetail(null);
                   }}
-                  className="flex-1 min-w-[125px] h-11 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-100 transition-all"
+                  className="flex-1 min-w-[125px] h-11 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-100 transition-all flex items-center justify-center gap-2"
                 >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
                   Transfer Stock
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedProductDetail(null)}
-                  className="w-full h-11 bg-slate-800 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-md shadow-slate-800/10 mt-1"
+                  className="w-full lg:w-auto px-6 h-11 bg-slate-800 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-md shadow-slate-800/10"
                 >
                   Close Details
                 </button>
