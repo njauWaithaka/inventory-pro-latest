@@ -97,7 +97,7 @@ export function getStockAtTimestamp(product: any, movements: any[], targetDate: 
 
   for (const m of movementsAfter) {
     const q = Number(m.quantity) || 0;
-    const isOutbound = m.type === 'sale' || m.transferType === 'out' || (m.type === 'adjustment' && m.quantity < 0);
+    const isOutbound = m.type === 'sale' || m.type === 'outbound' || m.transferType === 'out' || (m.type === 'adjustment' && m.quantity < 0);
     if (isOutbound) {
       qty += q;
     } else {
@@ -138,13 +138,17 @@ export function calculateStockTurnover(
       m => m.productId === product.id && m.createdAt
     );
 
-    const unitsSold = prodMovements.reduce((sum, m) => {
+    let unitsSold = prodMovements.reduce((sum, m) => {
       const mTime = new Date(m.createdAt).getTime();
-      if (mTime >= startTime && mTime <= endTime && m.type === 'sale') {
-        return sum + (Number(m.quantity) || 0);
+      if (mTime >= startTime && mTime <= endTime && (m.type === 'sale' || m.type === 'outbound')) {
+        return sum + (Math.abs(Number(m.quantity)) || 0);
       }
       return sum;
     }, 0);
+
+    if (unitsSold === 0) {
+      unitsSold = Number(product.unitsSold) || (product.initialStock && product.quantity !== undefined ? Math.max(0, product.initialStock - product.quantity) : 0);
+    }
 
     // 3. Turnover Ratio
     let turnoverRatio = 0;

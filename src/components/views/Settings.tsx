@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   User, Building2, Bell, Shield, Palette, 
   Link2, Save, ChevronDown, Globe, Mail, Phone,
-  Database, CheckCircle2, Loader2, Plus
+  Database, CheckCircle2, Loader2, Plus, Sparkles, RefreshCcw, Check
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings, UserProfile, Company } from '../../contexts/SettingsContext';
+import { seedDemoShopData } from '../../lib/seedDemoData';
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -24,10 +25,27 @@ export function Settings() {
   const [activeTab, setActiveTab] = useState('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedSuccess, setSeedSuccess] = useState(false);
 
   // Local state for form fields
   const [profileData, setProfileData] = useState<Partial<UserProfile>>({});
   const [companyData, setCompanyData] = useState<Partial<Company>>({});
+
+  const handleSeedDemo = async () => {
+    if (!profile?.companyId) return;
+    setIsSeeding(true);
+    try {
+      await seedDemoShopData(profile.companyId, user?.uid || 'staff');
+      setSeedSuccess(true);
+      setTimeout(() => setSeedSuccess(false), 4000);
+    } catch (error) {
+      console.error('Failed to seed demo data:', error);
+      alert('Error seeding demo shop data. Please try again.');
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   useEffect(() => {
     if (profile) setProfileData(profile);
@@ -235,6 +253,47 @@ export function Settings() {
                           </select>
                         </div>
                      </div>
+                  </div>
+
+                  {/* Demo Shop Dataset Seeding Card */}
+                  <div className="space-y-4 p-6 bg-slate-50 border border-slate-200 rounded-[2rem] flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                          <Sparkles className="w-4 h-4" />
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-sm text-left">Demo Shop Dataset Seeding</h4>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium text-left leading-relaxed">
+                        Populate a concise, mathematically balanced demo dataset (6 core inventory SKUs with cost/price margins, sample sales invoices, and suppliers).
+                        This allows you to verify that calculations across Inventory, Demand Planning, MRP, and Sales Analytics are computing accurately.
+                      </p>
+
+                      {seedSuccess && (
+                        <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-xs font-bold text-emerald-800 text-left">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Demo Shop Dataset seeded successfully! Inventory, Sales, and Suppliers updated.</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-200/60">
+                      <button
+                        type="button"
+                        onClick={handleSeedDemo}
+                        disabled={isSeeding}
+                        className="w-full h-12 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2"
+                      >
+                        {isSeeding ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : seedSuccess ? (
+                          <Check className="w-4 h-4" />
+                        ) : (
+                          <Database className="w-4 h-4" />
+                        )}
+                        {isSeeding ? 'Seeding Dataset...' : seedSuccess ? 'Dataset Active' : 'Seed Demo Shop Data'}
+                      </button>
+                    </div>
                   </div>
                </div>
                

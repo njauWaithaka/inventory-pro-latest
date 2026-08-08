@@ -75,7 +75,6 @@ const menuGroups = [
     label: "Sales",
     icon: Receipt,
     children: [
-      { id: "quotations" as ViewType, label: "Quotations", icon: FileText },
       { id: "invoices" as ViewType, label: "Invoices", icon: FileText },
       { id: "receipts" as ViewType, label: "Receipts", icon: ClipboardList },
       {

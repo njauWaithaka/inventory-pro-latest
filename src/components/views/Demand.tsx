@@ -153,7 +153,7 @@ export function Demand() {
 
     const initialMappedProds = filteredProds.map(p => {
       const stats = salesStats[p.id] || { qty: 0, value: 0 };
-      const sold = stats.qty;
+      const sold = Math.max(stats.qty || 0, Number(p.unitsSold) || 0, (p.initialStock && p.quantity !== undefined ? Math.max(0, p.initialStock - p.quantity) : 0));
       const velocity = sold / Math.max(1, daysLimit);
       const stockVal = (p.quantity || 0) * (p.buyingPrice || p.value || 10);
 
@@ -488,13 +488,6 @@ export function Demand() {
             value: `${metrics.todayDemand} units`, 
             color: 'border-blue-200 bg-blue-50/20 text-blue-600', 
             sub: 'Active daily volume',
-            status: 'HEALTHY'
-          },
-          { 
-            label: 'Forecasted Demand', 
-            value: `${Math.round(metrics.totalUnitsSold * 1.18)} pcs`, 
-            color: 'border-orange-200 bg-orange-50/20 text-orange-600', 
-            sub: 'Next 30 days projection',
             status: 'HEALTHY'
           },
           { 

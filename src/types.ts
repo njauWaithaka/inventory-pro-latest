@@ -4,6 +4,7 @@ export interface Product {
   id: string;
   name: string;
   sku: string;
+  barcode?: string;
   categoryId?: string;
   category?: string; // Legacy/Display
   warehouseId?: string;

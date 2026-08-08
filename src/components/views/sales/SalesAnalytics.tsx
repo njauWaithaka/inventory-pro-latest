@@ -11,7 +11,8 @@ import { useSettings } from '../../../contexts/SettingsContext';
 import { cn } from '../../../lib/utils';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, ComposedChart, AreaChart, Area 
+  Tooltip, Legend, ResponsiveContainer, ComposedChart, AreaChart, Area,
+  PieChart, Pie, Cell
 } from 'recharts';
 import { motion } from 'motion/react';
 
@@ -369,6 +370,91 @@ export function SalesAnalytics() {
     };
   }, [hourlyData, currency]);
 
+  // Payment Method Breakdown Data
+  const paymentMethodData = useMemo(() => {
+    const map: Record<string, number> = {};
+    filteredRecords.forEach(r => {
+      const pm = r.paymentMethod || 'Other';
+      map[pm] = (map[pm] || 0) + r.netSales;
+    });
+
+    const colors: Record<string, string> = {
+      'Cash': '#10b981',
+      'M-Pesa': '#2563eb',
+      'Credit Card': '#8b5cf6',
+      'Debit Card': '#f59e0b',
+      'Bank Transfer': '#64748b'
+    };
+
+    const total = Object.values(map).reduce((a, b) => a + b, 0);
+
+    return Object.entries(map).map(([name, value]) => ({
+      name,
+      value: Math.round(value),
+      percentage: total > 0 ? parseFloat(((value / total) * 100).toFixed(1)) : 0,
+      color: colors[name] || '#3b82f6'
+    })).sort((a, b) => b.value - a.value);
+  }, [filteredRecords]);
+
+  // Top Products Data
+  const topProductsData = useMemo(() => {
+    const map: Record<string, { name: string; Sales: number; Quantity: number }> = {};
+    filteredRecords.forEach(r => {
+      const p = r.productName || 'Unknown';
+      if (!map[p]) map[p] = { name: p, Sales: 0, Quantity: 0 };
+      map[p].Sales += r.netSales;
+      map[p].Quantity += r.quantitySold;
+    });
+
+    return Object.values(map)
+      .sort((a, b) => b.Sales - a.Sales)
+      .slice(0, 6)
+      .map(item => ({
+        ...item,
+        Sales: Math.round(item.Sales)
+      }));
+  }, [filteredRecords]);
+
+  // Branch Performance Data
+  const branchPerformanceData = useMemo(() => {
+    const map: Record<string, { name: string; Sales: number; Target: number; Orders: number }> = {};
+    filteredRecords.forEach(r => {
+      const b = r.branch || 'Main Wh';
+      if (!map[b]) map[b] = { name: b, Sales: 0, Target: 0, Orders: 0 };
+      map[b].Sales += r.netSales;
+      map[b].Target += r.salesTarget;
+      map[b].Orders += 1;
+    });
+
+    return Object.values(map).map(item => ({
+      ...item,
+      Sales: Math.round(item.Sales),
+      Target: Math.round(item.Target)
+    })).sort((a, b) => b.Sales - a.Sales);
+  }, [filteredRecords]);
+
+  // Customer Segment Performance Data
+  const segmentPerformanceData = useMemo(() => {
+    const map: Record<string, { name: string; Revenue: number; Customers: Set<string>; Orders: number }> = {};
+    filteredRecords.forEach(r => {
+      const seg = r.customerSegment || 'General';
+      if (!map[seg]) map[seg] = { name: seg, Revenue: 0, Customers: new Set(), Orders: 0 };
+      map[seg].Revenue += r.netSales;
+      map[seg].Customers.add(r.customer);
+      map[seg].Orders += 1;
+    });
+
+    return Object.values(map).map(item => {
+      const custCount = item.Customers.size || 1;
+      return {
+        name: item.name,
+        Revenue: Math.round(item.Revenue),
+        AvgOrderValue: Math.round(item.Revenue / (item.Orders || 1)),
+        Patrons: custCount
+      };
+    }).sort((a, b) => b.Revenue - a.Revenue);
+  }, [filteredRecords]);
+
   // Export to CSV Function
   const exportCSV = () => {
     const headers = ['Invoice No', 'Date', 'Time', 'Branch', 'Category', 'Product', 'Quantity', 'Sales (Net)', 'Target', 'Salesperson'];
@@ -632,7 +718,115 @@ export function SalesAnalytics() {
         </div>
       </div>
 
-      {/* Transaction Records & representative ledger */}
+      {/* Modern Visual Charts Grid: Payment Split & Top Products & Branch Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Payment Method Distribution Donut Chart */}
+        <div className="bg-white p-6 border border-slate-200 rounded-[2rem] shadow-sm space-y-4">
+          <div>
+            <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-tight flex items-center gap-1.5">
+              <CreditCard className="w-4 h-4 text-purple-600" />
+              Payment Channel Share
+            </h4>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+              Revenue distribution across settlement methods.
+            </p>
+          </div>
+
+          <div className="h-48 flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={paymentMethodData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={75}
+                  paddingAngle={4}
+                  dataKey="value"
+                >
+                  {paymentMethodData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff' }} 
+                  formatter={(val: any) => [`${currency}${Number(val).toLocaleString()}`, 'Revenue']}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            {paymentMethodData.map((pm) => (
+              <div key={pm.name} className="flex items-center justify-between text-xs font-bold">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: pm.color }} />
+                  <span className="text-slate-700">{pm.name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-900 font-black">
+                  <span>{currency}{pm.value.toLocaleString()}</span>
+                  <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{pm.percentage}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Top Selling Products Revenue vs Units */}
+        <div className="bg-white p-6 border border-slate-200 rounded-[2rem] shadow-sm space-y-4">
+          <div>
+            <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-tight flex items-center gap-1.5">
+              <Package className="w-4 h-4 text-blue-600" />
+              Top Selling Products
+            </h4>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+              Top SKUs ordered by total net sales revenue.
+            </p>
+          </div>
+
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topProductsData} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                <XAxis type="number" stroke="#94a3b8" fontSize={9} tickLine={false} />
+                <YAxis dataKey="name" type="category" stroke="#475569" fontSize={9} tickLine={false} width={100} />
+                <Tooltip 
+                  contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff' }}
+                  formatter={(val: any) => [`${currency}${Number(val).toLocaleString()}`, 'Net Sales']}
+                />
+                <Bar dataKey="Sales" fill="#2563eb" barSize={14} radius={[0, 4, 4, 0]} name="Net Sales" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Branch & Regional Revenue Breakdown */}
+        <div className="bg-white p-6 border border-slate-200 rounded-[2rem] shadow-sm space-y-4">
+          <div>
+            <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-tight flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-emerald-600" />
+              Branch & Regional Contribution
+            </h4>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+              Actual sales vs target margins by store location.
+            </p>
+          </div>
+
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={branchPerformanceData} margin={{ left: -15, right: 0, top: 5, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" stroke="#94a3b8" fontSize={8} tickLine={false} />
+                <YAxis stroke="#94a3b8" fontSize={8} tickLine={false} />
+                <Tooltip contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff' }} />
+                <Bar dataKey="Sales" fill="#10b981" barSize={12} radius={[4, 4, 0, 0]} name="Actual Sales" />
+                <Bar dataKey="Target" fill="#cbd5e1" barSize={12} radius={[4, 4, 0, 0]} name="Target" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Category breakdown table */}

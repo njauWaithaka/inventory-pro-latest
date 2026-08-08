@@ -114,17 +114,18 @@ export function ProfitTracking() {
       
       // Dynamic real-time sales volume based on invoice entries and stock movements
       const salesFromInvoices = dbInvoices
-        .filter(inv => inv.status === 'paid' || inv.status === 'sent')
+        .filter(inv => inv.status?.toLowerCase() === 'paid' || inv.status?.toLowerCase() === 'sent')
         .flatMap(inv => inv.items || [])
         .filter((item: any) => item.productId === p.id)
         .reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
 
       const salesFromMovements = dbStockMovements
-        .filter(mov => mov.productId === p.id && mov.type === 'sale')
+        .filter(mov => mov.productId === p.id && (mov.type === 'sale' || mov.type === 'outbound'))
         .reduce((sum: number, mov: any) => sum + (Math.abs(Number(mov.quantity)) || 0), 0);
 
-      // Total units sold dynamically calculated from actual transactions
-      const volume = Math.max(p.unitsSold || 0, salesFromInvoices, salesFromMovements);
+      // Total units sold dynamically calculated from actual transactions or product properties
+      const derivedStockDiff = p.initialStock && p.quantity !== undefined ? Math.max(0, p.initialStock - p.quantity) : 0;
+      const volume = Math.max(Number(p.unitsSold) || 0, salesFromInvoices, salesFromMovements, derivedStockDiff);
 
       return {
         name,

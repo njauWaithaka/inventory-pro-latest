@@ -48,8 +48,11 @@ import {
   FileText,
   Clock,
   ArrowUpRight,
-  ShoppingCart
+  ShoppingCart,
+  QrCode,
+  Camera
 } from "lucide-react";
+import { ScannerModal } from "../ScannerModal";
 
 const BRANCHES = [
   { id: "main-wh", name: "Main Warehouse", location: "Building A, Industrial Zone" },
@@ -87,6 +90,7 @@ export function Inventory() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [isAuditing, setIsAuditing] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -382,6 +386,53 @@ export function Inventory() {
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "products");
     }
+  };
+
+  const handleScanResult = async (
+    product: Product,
+    actionType: 'check-in' | 'check-out' | 'view',
+    qty: number,
+    notes?: string
+  ) => {
+    if (!profile?.companyId || actionType === 'view') return;
+
+    const delta = actionType === 'check-in' ? qty : -qty;
+    const newQty = product.quantity + delta;
+
+    if (newQty < 0) {
+      alert("Error: Stock cannot go below zero.");
+      return;
+    }
+
+    const productRef = doc(db, `companies/${profile.companyId}/products`, product.id);
+    await updateDoc(productRef, {
+      quantity: newQty,
+      currentStock: newQty,
+      updatedAt: new Date().toISOString(),
+      serverUpdatedAt: serverTimestamp(),
+    });
+
+    const movementId = `mov_scan_${Date.now()}`;
+    await setDoc(doc(db, `companies/${profile.companyId}/stockMovements`, movementId), {
+      id: movementId,
+      productId: product.id,
+      type: actionType === 'check-in' ? "inbound" : "outbound",
+      quantity: qty,
+      beforeQty: product.quantity,
+      afterQty: newQty,
+      reason: notes || `Camera Barcode ${actionType === 'check-in' ? 'Check-In' : 'Check-Out'}`,
+      createdAt: new Date().toISOString(),
+      createdBy: user?.uid || "staff",
+      transactionId: movementId,
+      transactionType: actionType === 'check-in' ? "Scanner Check-In" : "Scanner Check-Out",
+      previousStock: product.quantity,
+      newStock: newQty,
+      userId: user?.uid || "staff",
+      timestamp: serverTimestamp(),
+    });
+
+    const { AlertService } = await import("../../lib/alertService");
+    await AlertService.runAlertSync(profile.companyId);
   };
 
   const handleTransferStock = async (e: React.FormEvent) => {
@@ -858,7 +909,14 @@ export function Inventory() {
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setIsScannerOpen(true)}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 h-11 border border-indigo-200 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all text-xs shadow-sm shadow-indigo-600/20"
+          >
+            <QrCode className="w-4 h-4 text-white" />
+            <span>Scan Barcode / QR</span>
+          </button>
           <button
             onClick={() => setIsAdjustingStock(true)}
             className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 h-11 border border-slate-200 rounded-lg bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-xs"
@@ -2999,6 +3057,14 @@ export function Inventory() {
         type={confirmConfig.type}
         onConfirm={confirmConfig.onConfirm}
         onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      <ScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        products={products}
+        onScanResult={handleScanResult}
+        currency={currency}
       />
     </div>
   );

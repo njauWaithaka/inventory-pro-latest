@@ -11,21 +11,17 @@ import { Quotations } from './Quotations';
 import { Invoices } from './Invoices';
 import { SalesAnalytics } from './SalesAnalytics';
 
-type SalesTab = 'quotations' | 'invoices' | 'analytics';
+type SalesTab = 'invoices' | 'analytics';
 
 export function SalesHub({ defaultView }: { defaultView?: ViewType }) {
-  const [activeTab, setActiveTab] = useState<SalesTab>(
-    defaultView === 'invoices' ? 'invoices' : 
-    'quotations'
-  );
+  const [activeTab, setActiveTab] = useState<SalesTab>('invoices');
 
   useEffect(() => {
-    if (defaultView === 'invoices') setActiveTab('invoices');
-    else if (defaultView === 'quotations') setActiveTab('quotations');
+    if (defaultView === 'analytics') setActiveTab('analytics');
+    else setActiveTab('invoices');
   }, [defaultView]);
 
   const tabs: { id: SalesTab; label: string; icon: any }[] = [
-    { id: 'quotations', label: 'Quotations', icon: FileText },
     { id: 'invoices', label: 'Sales Invoices', icon: Receipt },
     { id: 'analytics', label: 'Sales Analytics', icon: BarChart3 },
   ];
