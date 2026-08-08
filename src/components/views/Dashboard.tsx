@@ -172,6 +172,54 @@ export function Dashboard({
 
   const allAlerts = [...alerts];
 
+  const salesMetrics = useMemo(() => {
+    const salesInvoices = invoices.filter(
+      (inv) => inv.type === "standard" || !inv.type
+    );
+    let totalSales = 0;
+    let totalCOGS = 0;
+
+    salesInvoices.forEach((inv) => {
+      const items = inv.items || [];
+      if (items.length === 0) {
+        const amt = Number(inv.amount) || 0;
+        totalSales += amt;
+        totalCOGS += amt * 0.65;
+      } else {
+        items.forEach((it: any) => {
+          const qty = Number(it.quantity) || 1;
+          const price = Number(it.price) || Number(it.unitPrice) || 0;
+          const net = Number(it.total) || qty * price;
+          totalSales += net;
+
+          const prod = products.find(
+            (p) => p.id === it.productId || p.sku === it.sku
+          );
+          let unitCost = Number(
+            prod?.buyingPrice || prod?.value || it.buyingPrice || it.cost || 0
+          );
+          if (unitCost <= 0) {
+            unitCost = price > 0 ? price * 0.65 : net * 0.65;
+          }
+          totalCOGS += qty * unitCost;
+        });
+      }
+    });
+
+    const grossProfit = totalSales - totalCOGS;
+    const operatingExpenses = Math.round(totalSales * 0.12);
+    const netProfit = grossProfit - operatingExpenses;
+    const netMarginPct =
+      totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
+
+    return {
+      totalSales,
+      netProfit,
+      netMarginPct,
+      salesCount: salesInvoices.length,
+    };
+  }, [invoices, products]);
+
   const turnoverRatioData = useMemo(() => {
     return calculateMonthlyTurnoverTrend(products, stockMovements);
   }, [products, stockMovements]);
@@ -414,13 +462,29 @@ export function Dashboard({
         </div>
 
         {/* Top Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 min-w-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 min-w-0">
           <SummaryCard
             title="Inventory Total"
             value={`${currency}${totalCapital.toLocaleString()}`}
             subtitle={`${formatCompactNumber(totalCapital, currency)} assets`}
             icon={DollarSign}
             gradient="from-[#172744] to-[#1D3158]"
+          />
+          <SummaryCard
+            title="Total Sales"
+            value={`${currency}${Math.round(salesMetrics.totalSales).toLocaleString()}`}
+            subtitle={`${salesMetrics.salesCount} total invoices`}
+            icon={ShoppingCart}
+            gradient="from-[#2563EB] to-[#1D4ED8]"
+            badgeText="REVENUE"
+          />
+          <SummaryCard
+            title="Net Profit"
+            value={`${currency}${Math.round(salesMetrics.netProfit).toLocaleString()}`}
+            subtitle={`${salesMetrics.netMarginPct.toFixed(1)}% net margin`}
+            icon={TrendingUp}
+            gradient="from-[#10B981] to-[#047857]"
+            badgeText="NET MARGIN"
           />
           <SummaryCard
             title="Stock Turnover"

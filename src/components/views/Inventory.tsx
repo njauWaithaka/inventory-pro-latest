@@ -1035,18 +1035,26 @@ export function Inventory() {
                     </div>
                     <div>
                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
-                        Total Valuation
+                        Total Valuation (Cost Basis)
                       </span>
                       <span className="text-xl font-black text-indigo-600">
-                        {currency} {(selectedProductDetail.value * selectedProductDetail.quantity).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currency} {((Number(selectedProductDetail.buyingPrice) || Number(selectedProductDetail.value) || 0) * selectedProductDetail.quantity).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div className="pt-2 border-t border-slate-100">
                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
-                        Cost per Unit
+                        Buying Price (COGS)
                       </span>
                       <span className="text-xs font-bold text-slate-700">
-                        {currency} {parseFloat(selectedProductDetail.value as any || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currency} {(Number(selectedProductDetail.buyingPrice) || Number(selectedProductDetail.value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">
+                        Selling Price (Retail)
+                      </span>
+                      <span className="text-xs font-bold text-emerald-600">
+                        {currency} {(Number(selectedProductDetail.sellingPrice) || Number(selectedProductDetail.price) || ((Number(selectedProductDetail.buyingPrice) || Number(selectedProductDetail.value) || 0) * 1.3)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div className="pt-2 border-t border-slate-100">
@@ -2648,285 +2656,196 @@ export function Inventory() {
 
       {activeInventoryTab === "stock" && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="hidden lg:grid grid-cols-[1.2fr_100px_100px_80px_105px_80px_110px_100px_100px_80px] gap-4 px-8 py-4 bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
-          <div>Inventory Record</div>
-          <div>SKU ID</div>
-          <div>Category</div>
-          <div className="text-right">Units</div>
-          <div className="text-right">Valuation</div>
-          <div className="text-center">STR</div>
-          <div className="text-center">Expiry Date</div>
-          <div className="text-center">Days left</div>
-          <div className="text-center">Status</div>
-          <div className="text-center">Disposal</div>
-        </div>
+          <div className="overflow-x-auto min-w-full">
+            <div className="min-w-[640px] xl:min-w-[1100px]">
+              {/* Single Consistent Table Header */}
+              <div className="grid grid-cols-[minmax(130px,1.2fr)_50px_90px_90px_65px_32px] md:grid-cols-[minmax(130px,1.2fr)_50px_90px_90px_65px_70px_32px] lg:grid-cols-[minmax(140px,1.2fr)_90px_50px_90px_90px_85px_65px_70px_32px] xl:grid-cols-[minmax(150px,1.2fr)_85px_90px_50px_90px_90px_95px_60px_85px_65px_70px_32px] gap-2 md:gap-3 px-4 sm:px-6 py-3.5 items-center bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <div>Product</div>
+                <div className="hidden xl:block">SKU ID</div>
+                <div className="hidden lg:block">Category</div>
+                <div className="text-right">Units</div>
+                <div className="text-right">Buying Price</div>
+                <div className="text-right">Selling Price</div>
+                <div className="text-right hidden xl:block">Valuation</div>
+                <div className="text-center hidden xl:block">STR</div>
+                <div className="text-center hidden lg:block">Expiry Date</div>
+                <div className="text-center hidden md:block">Days left</div>
+                <div className="text-center">Status</div>
+                <div className="text-center">Action</div>
+              </div>
 
-        <div className="divide-y divide-slate-100">
-          {displayProducts.map((product) => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            let diffDays: number | null = null;
-            let expiryLabel = "Non-Perishable";
-            let daysLeftLabel = "--";
-            let statusLabel = "Fresh";
-            let statusBadgeColor =
-              "bg-emerald-50 text-emerald-600 border-emerald-100";
+              {/* Table Rows using the Exact Same Grid */}
+              <div className="divide-y divide-slate-100">
+                {displayProducts.map((product) => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  let diffDays: number | null = null;
+                  let expiryLabel = "Non-Perishable";
+                  let daysLeftLabel = "--";
+                  let statusLabel = "Fresh";
+                  let statusBadgeColor =
+                    "bg-emerald-50 text-emerald-600 border-emerald-100";
 
-            if (product.expiryDate) {
-              const exp = new Date(product.expiryDate);
-              exp.setHours(0, 0, 0, 0);
-              diffDays = Math.ceil(
-                (exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-              );
-              expiryLabel = product.expiryDate;
-              if (diffDays < 0) {
-                daysLeftLabel = `${Math.abs(diffDays)}d ago`;
-                statusLabel = "Expired";
-                statusBadgeColor =
-                  "bg-rose-50 text-rose-600 border-rose-100 font-extrabold animate-pulse";
-              } else if (diffDays <= 14) {
-                daysLeftLabel = `${diffDays}d left`;
-                statusLabel = "Near Expiry";
-                statusBadgeColor =
-                  "bg-amber-50 text-amber-600 border-amber-100 font-bold";
-              } else {
-                daysLeftLabel = `${diffDays}d left`;
-                statusLabel = "Fresh";
-                statusBadgeColor =
-                  "bg-emerald-50 text-emerald-600 border-emerald-100 font-medium";
-              }
-            }
+                  if (product.expiryDate) {
+                    const exp = new Date(product.expiryDate);
+                    exp.setHours(0, 0, 0, 0);
+                    diffDays = Math.ceil(
+                      (exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+                    );
+                    expiryLabel = product.expiryDate;
+                    if (diffDays < 0) {
+                      daysLeftLabel = `${Math.abs(diffDays)}d ago`;
+                      statusLabel = "Expired";
+                      statusBadgeColor =
+                        "bg-rose-50 text-rose-600 border-rose-100 font-extrabold animate-pulse";
+                    } else if (diffDays <= 14) {
+                      daysLeftLabel = `${diffDays}d left`;
+                      statusLabel = "Near Expiry";
+                      statusBadgeColor =
+                        "bg-amber-50 text-amber-600 border-amber-100 font-bold";
+                    } else {
+                      daysLeftLabel = `${diffDays}d left`;
+                      statusLabel = "Fresh";
+                      statusBadgeColor =
+                        "bg-emerald-50 text-emerald-600 border-emerald-100 font-medium";
+                    }
+                  }
 
-            return (
-              <React.Fragment key={product.id}>
-                {/* Desktop Row */}
-                <div 
-                  onClick={() => setSelectedProductDetail(product)}
-                  className="hidden lg:grid grid-cols-[1.2fr_100px_100px_80px_105px_80px_110px_100px_100px_80px] gap-4 px-8 py-5 items-center group cursor-pointer hover:bg-slate-50 transition-all text-left"
-                >
-                  <div className="flex items-center gap-4 text-left">
-                    <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:bg-white transition-all border border-slate-100 group-hover:border-blue-200 group-hover:shadow-sm">
-                      <Package className="w-5 h-5" />
-                    </div>
-                    <div className="text-left min-w-0">
-                      <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-all text-sm leading-tight truncate text-left">
-                        {product.name}
-                      </p>
-                      <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tight text-left flex flex-wrap gap-x-2 gap-y-0.5 items-center">
-                        <span>Last sold: {product.lastSold}</span>
-                        {product.batchNumber && (
-                          <span className="text-slate-500 bg-slate-100 px-1 rounded-sm">
-                            Batch: {product.batchNumber}
-                          </span>
-                        )}
-                        {product.manufactureDate && (
-                          <span className="text-slate-500 bg-slate-100 px-1 rounded-sm">
-                            Mfg: {product.manufactureDate}
-                          </span>
-                        )}
-                        <span className="text-indigo-600 bg-indigo-50 px-1 rounded-sm text-[8px] font-black uppercase tracking-wider border border-indigo-100/30 leading-none">
-                          📍 {BRANCHES.find(b => b.id === (product.warehouseId || "main-wh"))?.name || BRANCHES[0].name}
-                        </span>
-                        <span className="text-teal-600 bg-teal-50 px-1 rounded-sm text-[8px] font-black uppercase tracking-wider border border-teal-100/30 leading-none">
-                          ⚖️ UoM: {product.uom || "Piece"}
-                        </span>
-                        <span className="text-pink-600 bg-pink-50 px-1 rounded-sm text-[8px] font-black uppercase tracking-wider border border-pink-100/30 leading-none">
-                          📂 {product.materialGroup || "Finished Goods"}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className="font-bold text-slate-400 text-[11px] font-mono tracking-tighter uppercase">
-                    {product.sku}
-                  </div>
-                  <div className="font-semibold text-slate-500 text-[11px] italic truncate">
-                    {product.category}
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className={cn(
-                        "text-sm font-bold",
-                        product.quantity <= (product.reorderPoint ?? product.minStock ?? 10)
-                          ? "text-rose-500 font-extrabold"
-                          : "text-slate-900",
-                      )}
-                    >
-                      {product.quantity.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="text-right font-extrabold text-slate-900 text-xs">
-                    {currency} {product.value.toLocaleString()}
-                  </div>
-                  <div className="text-center font-extrabold font-mono text-xs">
-                    {(() => {
-                      const str = getSellThroughRate(product);
-                      return (
-                        <span className={cn(
-                          "px-2 py-0.5 rounded-full font-bold text-[10px]",
-                          str >= 70 ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : 
-                          str >= 40 ? "bg-blue-50 text-blue-600 border border-blue-100" : 
-                          "bg-amber-50 text-amber-600 border border-amber-100"
-                        )}>
-                          {str.toFixed(1)}%
-                        </span>
-                      );
-                    })()}
-                  </div>
-                  <div className="text-center font-bold text-xs text-slate-700 font-mono">
-                    {expiryLabel}
-                  </div>
-                  <div
-                    className={cn(
-                      "text-center font-bold text-xs font-mono",
-                      diffDays !== null
-                        ? diffDays < 0
-                          ? "text-[#E63946]"
-                          : diffDays <= 14
-                            ? "text-[#E28743]"
-                            : "text-[#2A9D8F]"
-                        : "text-slate-400",
-                    )}
-                  >
-                    {daysLeftLabel}
-                  </div>
-                  <div className="flex justify-center">
-                    <span
-                      className={cn(
-                        "px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border shadow-sm leading-none",
-                        statusBadgeColor,
-                      )}
-                    >
-                      {statusLabel}
-                    </span>
-                  </div>
-                  <div className="flex justify-center">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteProduct(product.id);
-                      }}
-                      title="Dispose expired item"
-                      className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-100 transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                  const buyingPrice = Number(product.buyingPrice) || Number(product.value) || 0;
+                  const sellingPrice = Number(product.sellingPrice) || Number(product.price) || (buyingPrice > 0 ? Math.round(buyingPrice * 1.3) : 0);
 
-                {/* Mobile Card */}
-                <div className="lg:hidden p-5 flex flex-col gap-4 bg-white border-b border-slate-100 text-left">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 flex-shrink-0 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 border border-slate-100">
-                      <Package className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between">
-                        <p className="font-bold text-slate-900 truncate leading-tight pr-2">
-                          {product.name}
-                        </p>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span
-                            className={cn(
-                              "px-2 py-0.5 rounded-lg text-[8px] font-bold uppercase tracking-widest border shrink-0",
-                              movementStyles[product.movement],
-                            )}
-                          >
-                            {product.movement}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest truncate">
-                        {product.sku} • {product.category}
-                      </p>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        <span className="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border border-indigo-100/30 shrink-0">
-                          📍 {BRANCHES.find(b => b.id === (product.warehouseId || "main-wh"))?.name || BRANCHES[0].name}
-                        </span>
-                        <span className="text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border border-teal-100/30 shrink-0">
-                          ⚖️ UoM: {product.uom || "Piece"}
-                        </span>
-                        <span className="text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border border-pink-100/30 shrink-0">
-                          📂 {product.materialGroup || "Finished Goods"}
-                        </span>
-                      </div>
-
-                      {product.expiryDate && (
-                        <div className="mt-2 flex items-center gap-1.5 leading-none">
-                          {(() => {
-                            const today = new Date();
-                            today.setHours(0, 0, 0, 0);
-                            const exp = new Date(product.expiryDate);
-                            exp.setHours(0, 0, 0, 0);
-                            const diffDays = Math.ceil(
-                              (exp.getTime() - today.getTime()) /
-                                (1000 * 60 * 60 * 24),
-                            );
-                            if (diffDays < 0) {
-                              return (
-                                <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 uppercase tracking-widest animate-pulse leading-none">
-                                  ⚠️ Expired ({product.expiryDate})
-                                </span>
-                              );
-                            } else if (diffDays <= 30) {
-                              return (
-                                <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase tracking-widest leading-none">
-                                  ⏳ Expiring soon in {diffDays}d
-                                </span>
-                              );
-                            } else {
-                              return (
-                                <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 uppercase tracking-tight leading-none">
-                                  🛡️ Expires: {product.expiryDate}
-                                </span>
-                              );
-                            }
-                          })()}
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-6 mt-4">
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                            In Stock
-                          </span>
-                          <span
-                            className={cn(
-                              "text-sm font-extrabold",
-                              product.quantity <= (product.reorderPoint ?? product.minStock ?? 10)
-                                ? "text-rose-500 font-black"
-                                : "text-slate-900",
-                            )}
-                          >
-                            {product.quantity.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="w-px h-6 bg-slate-100" />
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                            Valuation
-                          </span>
-                          <span className="text-sm font-extrabold text-slate-900">
-                            {formatCompactNumber(product.value, currency)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-[10px] font-medium text-slate-400 italic">
-                      Recorded: {product.lastSold}
-                    </span>
-                    <button
+                  return (
+                    <div
+                      key={product.id}
                       onClick={() => setSelectedProductDetail(product)}
-                      className="text-[9px] font-bold text-blue-600 uppercase tracking-widest px-4 py-2 bg-blue-50 rounded-lg border border-blue-100 transition-colors active:bg-blue-100"
+                      className="grid grid-cols-[minmax(130px,1.2fr)_50px_90px_90px_65px_32px] md:grid-cols-[minmax(130px,1.2fr)_50px_90px_90px_65px_70px_32px] lg:grid-cols-[minmax(140px,1.2fr)_90px_50px_90px_90px_85px_65px_70px_32px] xl:grid-cols-[minmax(150px,1.2fr)_85px_90px_50px_90px_90px_95px_60px_85px_65px_70px_32px] gap-2 md:gap-3 px-4 sm:px-6 py-3.5 items-center group cursor-pointer hover:bg-slate-50 transition-all text-left"
                     >
-                      View Details
-                    </button>
-                  </div>
-                </div>
-              </React.Fragment>
-            );
-          })}
+                      {/* Product */}
+                      <div className="flex items-center gap-3 text-left min-w-0">
+                        <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:bg-white transition-all border border-slate-100 group-hover:border-blue-200 group-hover:shadow-sm shrink-0">
+                          <Package className="w-4 h-4" />
+                        </div>
+                        <div className="text-left min-w-0">
+                          <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-all text-xs leading-tight truncate text-left">
+                            {product.name}
+                          </p>
+                          <p className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-tight text-left flex flex-wrap gap-x-1.5 gap-y-0.5 items-center">
+                            <span>Last sold: {product.lastSold}</span>
+                            <span className="inline lg:hidden text-slate-500 font-mono">
+                              {product.sku}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* SKU ID */}
+                      <div className="font-bold text-slate-400 text-[11px] font-mono tracking-tighter uppercase truncate hidden xl:block">
+                        {product.sku}
+                      </div>
+
+                      {/* Category */}
+                      <div className="font-semibold text-slate-500 text-[11px] italic truncate hidden lg:block">
+                        {product.category}
+                      </div>
+
+                      {/* Units */}
+                      <div className="text-right">
+                        <span
+                          className={cn(
+                            "text-xs font-bold",
+                            product.quantity <= (product.reorderPoint ?? product.minStock ?? 10)
+                              ? "text-rose-500 font-extrabold"
+                              : "text-slate-900",
+                          )}
+                        >
+                          {product.quantity.toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Buying Price */}
+                      <div className="text-right font-bold text-slate-700 text-xs font-mono whitespace-nowrap">
+                        {currency} {buyingPrice.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      </div>
+
+                      {/* Selling Price */}
+                      <div className="text-right font-extrabold text-emerald-600 text-xs font-mono whitespace-nowrap">
+                        {currency} {sellingPrice.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      </div>
+
+                      {/* Valuation */}
+                      <div className="text-right font-extrabold text-slate-900 text-xs font-mono whitespace-nowrap hidden xl:block">
+                        {currency} {(buyingPrice * product.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      </div>
+
+                      {/* STR */}
+                      <div className="text-center font-extrabold font-mono text-xs hidden xl:block">
+                        {(() => {
+                          const str = getSellThroughRate(product);
+                          return (
+                            <span className={cn(
+                              "px-1.5 py-0.5 rounded-full font-bold text-[9px]",
+                              str >= 70 ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : 
+                              str >= 40 ? "bg-blue-50 text-blue-600 border border-blue-100" : 
+                              "bg-amber-50 text-amber-600 border border-amber-100"
+                            )}>
+                              {str.toFixed(1)}%
+                            </span>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Expiry Date */}
+                      <div className="text-center font-bold text-[11px] text-slate-700 font-mono truncate hidden lg:block">
+                        {expiryLabel}
+                      </div>
+
+                      {/* Days Left */}
+                      <div
+                        className={cn(
+                          "text-center font-bold text-[11px] font-mono hidden md:block",
+                          diffDays !== null
+                            ? diffDays < 0
+                              ? "text-[#E63946]"
+                              : diffDays <= 14
+                                ? "text-[#E28743]"
+                                : "text-[#2A9D8F]"
+                            : "text-slate-400",
+                        )}
+                      >
+                        {daysLeftLabel}
+                      </div>
+
+                      {/* Status */}
+                      <div className="flex justify-center">
+                        <span
+                          className={cn(
+                            "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border shadow-sm leading-none whitespace-nowrap",
+                            statusBadgeColor,
+                          )}
+                        >
+                          {statusLabel}
+                        </span>
+                      </div>
+
+                      {/* Action */}
+                      <div className="flex justify-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteProduct(product.id);
+                          }}
+                          title="Dispose item"
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-100 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
           {products.length === 0 && !loading && (
             <div className="p-20 text-center">
               <p className="text-slate-400 font-medium">
@@ -2935,7 +2854,6 @@ export function Inventory() {
             </div>
           )}
         </div>
-      </div>
       )}
 
       {activeInventoryTab === "transfers" && (

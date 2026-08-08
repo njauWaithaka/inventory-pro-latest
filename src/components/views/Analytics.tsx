@@ -32,8 +32,10 @@ export function Analytics() {
   const { profile, company, currency } = useSettings();
   const [products, setProducts] = useState<any[]>([]);
   const [stockMovements, setStockMovements] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
   const [movementsLoaded, setMovementsLoaded] = useState(false);
+  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
 
   // Filter States
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('This Month');
@@ -73,13 +75,23 @@ export function Analytics() {
       setMovementsLoaded(true);
     });
 
+    const invQuery = collection(db, `companies/${profile.companyId}/invoices`);
+    const unsubscribeInvoices = onSnapshot(invQuery, (snapshot) => {
+      setInvoices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setInvoicesLoaded(true);
+    }, (error) => {
+      console.error("Query error in Analytics invoices:", error);
+      setInvoicesLoaded(true);
+    });
+
     return () => {
       unsubscribeProducts();
       unsubscribeMovements();
+      unsubscribeInvoices();
     };
   }, [profile?.companyId]);
 
-  const loading = !productsLoaded || !movementsLoaded;
+  const loading = !productsLoaded || !movementsLoaded || !invoicesLoaded;
 
   // Custom range memo
   const customRange = useMemo(() => {
@@ -119,6 +131,53 @@ export function Analytics() {
     return sum + received;
   }, 0);
   const averageSTR = totalUnitsReceived > 0 ? (totalUnitsSold / totalUnitsReceived) * 100 : 0;
+
+  // Calculate Sales, Gross Profit, and Net Profit from Invoices
+  const salesMetrics = useMemo(() => {
+    const salesInvoices = invoices.filter(inv => inv.type === 'standard' || !inv.type);
+    
+    const filteredInvoices = salesInvoices.filter(inv => {
+      const invDateStr = inv.date || inv.createdAt;
+      if (!invDateStr) return true;
+      const invDate = new Date(invDateStr);
+      if (isNaN(invDate.getTime())) return true;
+      if (dateRange?.start && invDate < dateRange.start) return false;
+      if (dateRange?.end && invDate > dateRange.end) return false;
+      return true;
+    });
+
+    let totalSales = 0;
+    let totalCOGS = 0;
+
+    filteredInvoices.forEach(inv => {
+      const items = inv.items || [];
+      if (items.length === 0) {
+        const amt = Number(inv.amount) || 0;
+        totalSales += amt;
+        totalCOGS += amt * 0.65;
+      } else {
+        items.forEach((it: any) => {
+          const qty = Number(it.quantity) || 1;
+          const price = Number(it.price || it.unitPrice) || 0;
+          const lineTotal = Number(it.total) || qty * price;
+          totalSales += lineTotal;
+
+          const prod = products.find(p => p.id === it.productId || p.sku === it.sku || p.name === it.name);
+          let unitCost = Number(prod?.buyingPrice || prod?.value || it.buyingPrice || it.cost || 0);
+          if (unitCost <= 0) {
+            unitCost = price > 0 ? price * 0.65 : lineTotal * 0.65;
+          }
+          totalCOGS += qty * unitCost;
+        });
+      }
+    });
+
+    const grossProfit = totalSales - totalCOGS;
+    const operatingExpenses = Math.round(totalSales * 0.12);
+    const netProfit = grossProfit - operatingExpenses;
+
+    return { totalSales, grossProfit, netProfit };
+  }, [invoices, products, dateRange]);
 
   // Overall/Average Turnover value for the stat card
   const overallTurnover = overallStats.overallRatio;
@@ -280,51 +339,68 @@ export function Analytics() {
       </div>
 
       {/* Mini Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
-        <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-4">
-          <div className="w-8 h-8 sm:w-12 sm:h-12 bg-emerald-50 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
-            <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-emerald-500" />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-50 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
           </div>
           <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base md:text-lg font-bold text-slate-900 leading-none truncate font-mono">{overallTurnover.toFixed(2)}x</p>
-            <p className="text-[8px] sm:text-[10px] md:text-xs font-medium text-slate-400 mt-0.5 sm:mt-1.5 leading-tight truncate">Turnover ({selectedPeriod})</p>
+            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate font-mono">{overallTurnover.toFixed(2)}x</p>
+            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Turnover ({selectedPeriod})</p>
           </div>
         </div>
+        
         {/* Total Inventory */}
-        <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-4">
-          <div className="w-8 h-8 sm:w-12 sm:h-12 bg-slate-900 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
-            <DollarSign className="w-4 h-4 sm:w-6 sm:h-6" />
+        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-slate-900 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
+            <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base md:text-lg font-bold text-slate-900 leading-none truncate">{formatCompactNumber(totalCapital, currency)}</p>
-            <p className="text-[8px] sm:text-[10px] md:text-xs font-bold text-slate-400 mt-0.5 sm:mt-1.5 leading-tight truncate">Total Value</p>
+            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{formatCompactNumber(totalCapital, currency)}</p>
+            <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Total Value</p>
           </div>
         </div>
-        <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-4">
-          <div className="w-8 h-8 sm:w-12 sm:h-12 bg-emerald-500 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
-            <Package className="w-4 h-4 sm:w-6 sm:h-6" />
+
+        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-500 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
+            <Package className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base md:text-lg font-bold text-slate-900 leading-none truncate">{totalSKUs.toLocaleString()}</p>
-            <p className="text-[8px] sm:text-[10px] md:text-xs font-medium text-slate-400 mt-0.5 sm:mt-1.5 leading-tight truncate">Active SKUs</p>
+            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{totalSKUs.toLocaleString()}</p>
+            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Active SKUs</p>
           </div>
         </div>
-        <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-4 text-left">
-          <div className="w-8 h-8 sm:w-12 sm:h-12 bg-amber-100 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
-            <BarChart3 className="w-4 h-4 sm:w-6 sm:h-6 text-amber-500" />
+
+        {/* Total Sales Card */}
+        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3 text-left">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-500 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
+            <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base md:text-lg font-bold text-slate-900 leading-none truncate">87%</p>
-            <p className="text-[8px] sm:text-[10px] md:text-xs font-medium text-slate-400 mt-0.5 sm:mt-1.5 leading-tight truncate">Fill Rate</p>
+            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{currency}{Math.round(salesMetrics.totalSales).toLocaleString()}</p>
+            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Total Sales</p>
           </div>
         </div>
-        <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-4 text-left col-span-2 md:col-span-1">
-          <div className="w-8 h-8 sm:w-12 sm:h-12 bg-blue-50 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
-            <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-blue-500" />
+
+        {/* Gross Profit Card */}
+        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3 text-left">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-600 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base md:text-lg font-bold text-slate-900 leading-none truncate font-mono">{averageSTR.toFixed(1)}%</p>
-            <p className="text-[8px] sm:text-[10px] md:text-xs font-medium text-slate-400 mt-0.5 sm:mt-1.5 leading-tight truncate">Sell-Through Rate</p>
+            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{currency}{Math.round(salesMetrics.grossProfit).toLocaleString()}</p>
+            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Gross Profit</p>
+          </div>
+        </div>
+
+        {/* Net Profit Card */}
+        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3 text-left">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-600 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
+            <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="text-left min-w-0">
+            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{currency}{Math.round(salesMetrics.netProfit).toLocaleString()}</p>
+            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Net Profit</p>
           </div>
         </div>
       </div>

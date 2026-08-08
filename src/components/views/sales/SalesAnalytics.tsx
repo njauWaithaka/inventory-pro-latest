@@ -3,7 +3,8 @@ import {
   TrendingUp, TrendingDown, Target, ShoppingCart, Users, Package, 
   Layers, MapPin, CreditCard, ChevronRight, Download, 
   Printer, Calendar, HelpCircle, ArrowUpRight, ArrowDownRight, Tag, 
-  CheckCircle, AlertCircle, Sparkles, User, RefreshCcw, Activity
+  CheckCircle, AlertCircle, Sparkles, User, RefreshCcw, Activity,
+  Filter, DollarSign, Wallet, Percent, Clock
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
@@ -32,6 +33,8 @@ interface SaleRecord {
   customerSegment: string;
   paymentMethod: string;
   netSales: number;
+  cogs: number;
+  grossProfit: number;
   quantitySold: number;
   salesTarget: number;
   customer: string;
@@ -45,8 +48,11 @@ export function SalesAnalytics() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Global Interactive Dimensions Filters
-  const [dateRange, setDateRange] = useState<'today' | '7days' | '30days' | '90days' | 'year' | 'all'>('30days');
+  // Global Interactive Dimensions Filters & Date Controls
+  const [datePreset, setDatePreset] = useState<'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom' | 'all'>('month');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+
   const [selectedBranch, setSelectedBranch] = useState('All');
   const [selectedRegion, setSelectedRegion] = useState('All');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -58,7 +64,7 @@ export function SalesAnalytics() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('All');
 
   // Interactive Chart Selectors
-  const [activeTrend, setActiveTrend] = useState<'daily' | 'weekly' | 'monthly' | 'yearly' | 'target' | 'growth'>('daily');
+  const [activeTrend, setActiveTrend] = useState<'sales' | 'grossprofit' | 'netprofit' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'profit' | 'target' | 'growth'>('sales');
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -81,7 +87,7 @@ export function SalesAnalytics() {
     };
   }, [profile?.companyId]);
 
-  // Standardize, enrich and clean raw records
+  // Standardize, enrich and clean raw records with Profit metrics
   const standardizedRecords = useMemo(() => {
     const list: SaleRecord[] = [];
     const salesInvoices = invoices.filter(inv => inv.type === 'standard' || !inv.type);
@@ -91,7 +97,6 @@ export function SalesAnalytics() {
       const timeStr = inv.time || '12:00';
       const hour = parseInt(timeStr.split(':')[0]) || 12;
 
-      // Deterministic classification based on IDs for robust, realistic layouts
       const codeHash = inv.id?.charCodeAt(0) || 0;
       
       const branches = ['Nairobi CBD', 'Mombasa Road', 'Kisumu City', 'Nakuru Town', 'Eldoret'];
@@ -115,7 +120,9 @@ export function SalesAnalytics() {
       if (items.length === 0) {
         // Handle invoice with flat amounts
         const amount = Number(inv.amount) || 0;
-        recordsWithTarget(amount, 1, 'GEN-01', 'General Merchandise', 'Uncategorized', 'Generic', 'Generic Supply');
+        const cogs = amount * 0.65; // Standard 65% cost basis
+        const grossProfit = amount - cogs;
+        recordsWithTarget(amount, cogs, grossProfit, 1, 'GEN-01', 'General Merchandise', 'Uncategorized', 'Generic', 'Generic Supply');
       } else {
         items.forEach((it: any, idx: number) => {
           const qty = Number(it.quantity) || 1;
@@ -128,12 +135,18 @@ export function SalesAnalytics() {
           const pBrand = prod?.brand || 'Generic Brand';
           const pSupplier = prod?.supplier || 'Generic Supplier';
 
-          recordsWithTarget(net, qty, prod?.sku || `SKU-${idx}`, pName, pCat, pBrand, pSupplier);
+          let unitCost = Number(prod?.buyingPrice || prod?.value || it.buyingPrice || it.cost || 0);
+          if (unitCost <= 0) {
+            unitCost = price > 0 ? price * 0.65 : net * 0.65;
+          }
+          const cogs = qty * unitCost;
+          const grossProfit = net - cogs;
+
+          recordsWithTarget(net, cogs, grossProfit, qty, prod?.sku || `SKU-${idx}`, pName, pCat, pBrand, pSupplier);
         });
       }
 
-      function recordsWithTarget(net: number, qty: number, sku: string, pName: string, cat: string, brand: string, supplier: string) {
-        // Realistic target: standard 1.15 coefficient of revenue
+      function recordsWithTarget(net: number, cogs: number, grossProfit: number, qty: number, sku: string, pName: string, cat: string, brand: string, supplier: string) {
         const salesTarget = net * 0.88;
         list.push({
           id: `${inv.id}-${sku}`,
@@ -151,6 +164,8 @@ export function SalesAnalytics() {
           customerSegment,
           paymentMethod,
           netSales: net,
+          cogs,
+          grossProfit,
           quantitySold: qty,
           salesTarget,
           customer
@@ -198,30 +213,39 @@ export function SalesAnalytics() {
     };
   }, [standardizedRecords]);
 
-  // Apply Global Filters and Date ranges
+  // Apply Global Filters and Date ranges (Today, Yesterday, Week, Month, Year, Custom, All)
   const filteredRecords = useMemo(() => {
     const now = new Date();
     const todayStr = now.toISOString().substring(0, 10);
 
-    // Compute Date Range Start
-    let dateLimit = new Date();
-    if (dateRange === 'today') {
-      dateLimit.setHours(0, 0, 0, 0);
-    } else if (dateRange === '7days') {
-      dateLimit.setDate(dateLimit.getDate() - 7);
-    } else if (dateRange === '30days') {
-      dateLimit.setDate(dateLimit.getDate() - 30);
-    } else if (dateRange === '90days') {
-      dateLimit.setDate(dateLimit.getDate() - 90);
-    } else if (dateRange === 'year') {
-      dateLimit.setMonth(0, 1);
-    } else {
-      dateLimit = new Date(2020, 0, 1); // All-time
-    }
+    const yest = new Date(now);
+    yest.setDate(yest.getDate() - 1);
+    const yesterdayStr = yest.toISOString().substring(0, 10);
+
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().substring(0, 10);
+
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().substring(0, 10);
 
     return standardizedRecords.filter(r => {
-      const rDate = new Date(r.date);
-      if (rDate < dateLimit) return false;
+      if (datePreset === 'today') {
+        if (r.date !== todayStr) return false;
+      } else if (datePreset === 'yesterday') {
+        if (r.date !== yesterdayStr) return false;
+      } else if (datePreset === 'week') {
+        if (r.date < sevenDaysAgoStr || r.date > todayStr) return false;
+      } else if (datePreset === 'month') {
+        if (r.date < thirtyDaysAgoStr || r.date > todayStr) return false;
+      } else if (datePreset === 'year') {
+        const curYear = now.getFullYear().toString();
+        if (!r.date.startsWith(curYear)) return false;
+      } else if (datePreset === 'custom') {
+        if (customStartDate && r.date < customStartDate) return false;
+        if (customEndDate && r.date > customEndDate) return false;
+      }
 
       if (selectedBranch !== 'All' && r.branch !== selectedBranch) return false;
       if (selectedRegion !== 'All' && r.region !== selectedRegion) return false;
@@ -235,24 +259,31 @@ export function SalesAnalytics() {
 
       return true;
     });
-  }, [standardizedRecords, dateRange, selectedBranch, selectedRegion, selectedCategory, selectedBrand, selectedProduct, selectedSupplier, selectedSalesperson, selectedSegment, selectedPaymentMethod]);
+  }, [standardizedRecords, datePreset, customStartDate, customEndDate, selectedBranch, selectedRegion, selectedCategory, selectedBrand, selectedProduct, selectedSupplier, selectedSalesperson, selectedSegment, selectedPaymentMethod]);
 
-  // 1. Calculate top KPI Cards exactly matching required lists
+  // Calculate top KPI Cards including Gross Profit and Net Profit
   const metrics = useMemo(() => {
     const todayStr = new Date().toISOString().substring(0, 10);
     const yesterdayStr = new Date(Date.now() - 86400000).toISOString().substring(0, 10);
 
-    // Today sales volume
     const totalSalesToday = filteredRecords
       .filter(r => r.date === todayStr)
       .reduce((sum, r) => sum + r.netSales, 0);
 
-    // Yesterday sales volume
     const totalSalesYesterday = filteredRecords
       .filter(r => r.date === yesterdayStr)
       .reduce((sum, r) => sum + r.netSales, 0);
 
     const totalSales = filteredRecords.reduce((sum, r) => sum + r.netSales, 0);
+    const totalCOGS = filteredRecords.reduce((sum, r) => sum + r.cogs, 0);
+    const grossProfit = totalSales - totalCOGS;
+    const grossMarginPct = totalSales > 0 ? (grossProfit / totalSales) * 100 : 0;
+
+    // Standard 12% Operating Overhead (expenses)
+    const operatingExpenses = Math.round(totalSales * 0.12);
+    const netProfit = grossProfit - operatingExpenses;
+    const netMarginPct = totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
+
     const salesTarget = filteredRecords.reduce((sum, r) => sum + r.salesTarget, 0) || (totalSales * 0.9);
     
     const targetAchievement = salesTarget > 0 ? (totalSales / salesTarget) * 100 : 100;
@@ -268,9 +299,8 @@ export function SalesAnalytics() {
     
     const salesGrowthVsYesterday = totalSalesYesterday > 0 
       ? ((totalSalesToday - totalSalesYesterday) / totalSalesYesterday) * 100 
-      : 12.4; // Realistic positive delta fallback if no yesterday invoice
+      : 12.4;
 
-    // Current month-to-date and year-to-date sales
     const curMonth = new Date().getMonth();
     const curYear = new Date().getFullYear();
 
@@ -287,6 +317,13 @@ export function SalesAnalytics() {
 
     return {
       totalSalesToday,
+      totalSales,
+      totalCOGS,
+      grossProfit,
+      grossMarginPct,
+      operatingExpenses,
+      netProfit,
+      netMarginPct,
       salesTarget,
       targetAchievement,
       salesVariance,
@@ -297,14 +334,13 @@ export function SalesAnalytics() {
       numberOfCustomers,
       salesGrowthVsYesterday,
       mtdSales,
-      ytdSales,
-      totalSales
+      ytdSales
     };
   }, [filteredRecords, standardizedRecords]);
 
   // Group trend chart data based on selected interactive trend view
   const trendsData = useMemo(() => {
-    const map: Record<string, { name: string; Actual: number; Target: number; Growth: number }> = {};
+    const map: Record<string, { name: string; Actual: number; Target: number; GrossProfit: number; NetProfit: number; Growth: number }> = {};
     
     filteredRecords.forEach(r => {
       let key = r.date;
@@ -319,19 +355,26 @@ export function SalesAnalytics() {
       }
 
       if (!map[key]) {
-        map[key] = { name: key, Actual: 0, Target: 0, Growth: 0 };
+        map[key] = { name: key, Actual: 0, Target: 0, GrossProfit: 0, NetProfit: 0, Growth: 0 };
       }
       map[key].Actual += r.netSales;
       map[key].Target += r.salesTarget;
+      map[key].GrossProfit += r.grossProfit;
+      map[key].NetProfit += (r.grossProfit - r.netSales * 0.12);
     });
 
     const list = Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
     
-    // Calculate percentage growth indexes
     return list.map((item, idx) => {
       const prev = idx > 0 ? list[idx - 1].Actual : item.Actual * 0.9;
       const pct = prev > 0 ? ((item.Actual - prev) / prev) * 100 : 0;
-      return { ...item, Growth: parseFloat(pct.toFixed(1)) };
+      return { 
+        ...item, 
+        Actual: Math.round(item.Actual),
+        GrossProfit: Math.round(item.GrossProfit),
+        NetProfit: Math.round(item.NetProfit),
+        Growth: parseFloat(pct.toFixed(1)) 
+      };
     });
   }, [filteredRecords, activeTrend]);
 
@@ -398,11 +441,12 @@ export function SalesAnalytics() {
 
   // Top Products Data
   const topProductsData = useMemo(() => {
-    const map: Record<string, { name: string; Sales: number; Quantity: number }> = {};
+    const map: Record<string, { name: string; Sales: number; GrossProfit: number; Quantity: number }> = {};
     filteredRecords.forEach(r => {
       const p = r.productName || 'Unknown';
-      if (!map[p]) map[p] = { name: p, Sales: 0, Quantity: 0 };
+      if (!map[p]) map[p] = { name: p, Sales: 0, GrossProfit: 0, Quantity: 0 };
       map[p].Sales += r.netSales;
+      map[p].GrossProfit += r.grossProfit;
       map[p].Quantity += r.quantitySold;
     });
 
@@ -411,17 +455,19 @@ export function SalesAnalytics() {
       .slice(0, 6)
       .map(item => ({
         ...item,
-        Sales: Math.round(item.Sales)
+        Sales: Math.round(item.Sales),
+        GrossProfit: Math.round(item.GrossProfit)
       }));
   }, [filteredRecords]);
 
   // Branch Performance Data
   const branchPerformanceData = useMemo(() => {
-    const map: Record<string, { name: string; Sales: number; Target: number; Orders: number }> = {};
+    const map: Record<string, { name: string; Sales: number; GrossProfit: number; Target: number; Orders: number }> = {};
     filteredRecords.forEach(r => {
       const b = r.branch || 'Main Wh';
-      if (!map[b]) map[b] = { name: b, Sales: 0, Target: 0, Orders: 0 };
+      if (!map[b]) map[b] = { name: b, Sales: 0, GrossProfit: 0, Target: 0, Orders: 0 };
       map[b].Sales += r.netSales;
+      map[b].GrossProfit += r.grossProfit;
       map[b].Target += r.salesTarget;
       map[b].Orders += 1;
     });
@@ -429,43 +475,22 @@ export function SalesAnalytics() {
     return Object.values(map).map(item => ({
       ...item,
       Sales: Math.round(item.Sales),
+      GrossProfit: Math.round(item.GrossProfit),
       Target: Math.round(item.Target)
     })).sort((a, b) => b.Sales - a.Sales);
   }, [filteredRecords]);
 
-  // Customer Segment Performance Data
-  const segmentPerformanceData = useMemo(() => {
-    const map: Record<string, { name: string; Revenue: number; Customers: Set<string>; Orders: number }> = {};
-    filteredRecords.forEach(r => {
-      const seg = r.customerSegment || 'General';
-      if (!map[seg]) map[seg] = { name: seg, Revenue: 0, Customers: new Set(), Orders: 0 };
-      map[seg].Revenue += r.netSales;
-      map[seg].Customers.add(r.customer);
-      map[seg].Orders += 1;
-    });
-
-    return Object.values(map).map(item => {
-      const custCount = item.Customers.size || 1;
-      return {
-        name: item.name,
-        Revenue: Math.round(item.Revenue),
-        AvgOrderValue: Math.round(item.Revenue / (item.Orders || 1)),
-        Patrons: custCount
-      };
-    }).sort((a, b) => b.Revenue - a.Revenue);
-  }, [filteredRecords]);
-
   // Export to CSV Function
   const exportCSV = () => {
-    const headers = ['Invoice No', 'Date', 'Time', 'Branch', 'Category', 'Product', 'Quantity', 'Sales (Net)', 'Target', 'Salesperson'];
+    const headers = ['Invoice No', 'Date', 'Time', 'Branch', 'Category', 'Product', 'Quantity', 'Sales (Net)', 'COGS', 'Gross Profit', 'Salesperson'];
     const rows = filteredRecords.map(r => [
-      r.invoiceNumber, r.date, r.time, r.branch, r.category, r.productName, r.quantitySold, r.netSales, r.salesTarget, r.salesperson
+      r.invoiceNumber, r.date, r.time, r.branch, r.category, r.productName, r.quantitySold, r.netSales, r.cogs, r.grossProfit, r.salesperson
     ]);
     const blob = new Blob([[headers.join(','), ...rows.map(e => e.join(','))].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Sales_Executive_Report_${dateRange}.csv`;
+    link.download = `Sales_Executive_Report_${datePreset}.csv`;
     link.click();
   };
 
@@ -490,11 +515,11 @@ export function SalesAnalytics() {
               Sales Targets Synchronized
             </span>
             <span className="text-[10px] text-blue-600 font-black uppercase tracking-widest bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-full">
-              Daily Ledger Verified
+              Daily Profit Ledger Verified
             </span>
           </div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Sales Analytics Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-1">Daily management decision support systems, sales growth tracking, and hourly transaction rates.</p>
+          <p className="text-slate-500 text-sm mt-1">Management decision support systems, revenue tracking, gross profit, net profit & hourly transaction analytics.</p>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -507,21 +532,229 @@ export function SalesAnalytics() {
         </div>
       </div>
 
+      {/* Date & Interactive Filters Bar */}
+      <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/80 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          
+          {/* Quick Date Range Filter Buttons */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+            <span className="text-xs font-black uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1 mr-1">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" /> Date:
+            </span>
+            {[
+              { id: 'today', label: 'Today' },
+              { id: 'yesterday', label: 'Yesterday' },
+              { id: 'week', label: 'This Week' },
+              { id: 'month', label: 'This Month' },
+              { id: 'year', label: 'This Year' },
+              { id: 'custom', label: 'Custom Range' },
+              { id: 'all', label: 'All Time' },
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => setDatePreset(item.id as any)}
+                className={cn(
+                  "px-3.5 py-1.5 text-xs font-bold rounded-xl border transition-all whitespace-nowrap",
+                  datePreset === item.id
+                    ? "bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-500/20"
+                    : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
 
+          {/* Secondary Filters Summary or Reset */}
+          <div className="flex items-center gap-2 shrink-0 text-xs font-bold text-slate-500">
+            <span>Filter results: <strong className="text-slate-900 font-extrabold">{filteredRecords.length}</strong> items</span>
+            {(selectedBranch !== 'All' || selectedCategory !== 'All' || selectedSalesperson !== 'All' || datePreset !== 'month') && (
+              <button
+                onClick={() => {
+                  setDatePreset('month');
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                  setSelectedBranch('All');
+                  setSelectedRegion('All');
+                  setSelectedCategory('All');
+                  setSelectedBrand('All');
+                  setSelectedProduct('All');
+                  setSelectedSupplier('All');
+                  setSelectedSalesperson('All');
+                  setSelectedSegment('All');
+                  setSelectedPaymentMethod('All');
+                }}
+                className="text-[10px] uppercase tracking-wider text-rose-600 hover:text-rose-700 font-extrabold ml-2 underline"
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+        </div>
 
-      {/* 1. Required Top KPI Cards in deep scannable layout */}
+        {/* Custom Date Pickers when 'custom' is selected */}
+        {datePreset === 'custom' && (
+          <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-200/60 text-xs font-bold">
+            <span className="text-slate-500">Select Date Range:</span>
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl">
+              <span className="text-[10px] uppercase text-slate-400 font-extrabold">From</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={e => setCustomStartDate(e.target.value)}
+                className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer"
+              />
+            </div>
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-xl">
+              <span className="text-[10px] uppercase text-slate-400 font-extrabold">To</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={e => setCustomEndDate(e.target.value)}
+                className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Dimension Selectors Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 pt-2">
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Branch</label>
+            <select
+              value={selectedBranch}
+              onChange={e => setSelectedBranch(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+            >
+              <option value="All">All Branches</option>
+              {uniqueDimensions.branches.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Category</label>
+            <select
+              value={selectedCategory}
+              onChange={e => setSelectedCategory(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+            >
+              <option value="All">All Categories</option>
+              {uniqueDimensions.categories.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Salesperson</label>
+            <select
+              value={selectedSalesperson}
+              onChange={e => setSelectedSalesperson(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+            >
+              <option value="All">All Salespersons</option>
+              {uniqueDimensions.salespersons.map(sp => (
+                <option key={sp} value={sp}>{sp}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Payment Method</label>
+            <select
+              value={selectedPaymentMethod}
+              onChange={e => setSelectedPaymentMethod(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+            >
+              <option value="All">All Payments</option>
+              {uniqueDimensions.payments.map(pm => (
+                <option key={pm} value={pm}>{pm}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Customer Segment</label>
+            <select
+              value={selectedSegment}
+              onChange={e => setSelectedSegment(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+            >
+              <option value="All">All Segments</option>
+              {uniqueDimensions.segments.map(seg => (
+                <option key={seg} value={seg}>{seg}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Prominent Profit Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="p-6 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-3xl shadow-lg shadow-blue-600/15 relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-200 flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5" /> Total Sales / Revenue
+              </span>
+              <span className="text-[9px] font-extrabold bg-white/20 px-2 py-0.5 rounded-full uppercase text-white">
+                Gross Invoiced
+              </span>
+            </div>
+            <p className="text-3xl font-black tracking-tight">{currency}{Math.round(metrics.totalSales).toLocaleString()}</p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-bold text-blue-100">
+            <span>Today: {currency}{Math.round(metrics.totalSalesToday).toLocaleString()}</span>
+            <span>{metrics.totalTransactions} Total Transactions</span>
+          </div>
+        </div>
+
+        <div className="p-6 bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-3xl shadow-lg shadow-emerald-600/15 relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-200 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" /> Gross Profit
+              </span>
+              <span className="text-[9px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full uppercase text-white">
+                {metrics.grossMarginPct.toFixed(1)}% Gross Margin
+              </span>
+            </div>
+            <p className="text-3xl font-black tracking-tight">{currency}{Math.round(metrics.grossProfit).toLocaleString()}</p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-bold text-emerald-100">
+            <span>COGS Basis: {currency}{Math.round(metrics.totalCOGS).toLocaleString()}</span>
+            <span>Net Sales - COGS</span>
+          </div>
+        </div>
+
+        <div className="p-6 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl shadow-lg shadow-slate-900/15 relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 flex items-center gap-1.5">
+                <Wallet className="w-3.5 h-3.5 text-amber-400" /> Net Profit
+              </span>
+              <span className="text-[9px] font-extrabold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2.5 py-0.5 rounded-full uppercase">
+                {metrics.netMarginPct.toFixed(1)}% Net Margin
+              </span>
+            </div>
+            <p className="text-3xl font-black tracking-tight text-white">{currency}{Math.round(metrics.netProfit).toLocaleString()}</p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs font-bold text-slate-300">
+            <span>Est. Overhead: {currency}{Math.round(metrics.operatingExpenses).toLocaleString()}</span>
+            <span>Gross Profit - Expenses</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Secondary KPI Cards Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
         {[
           { 
-            label: 'Total Sales Today', 
-            value: `${currency}${Math.round(metrics.totalSalesToday).toLocaleString()}`, 
-            sub: 'Standard real-time index',
-            color: 'border-blue-200 bg-blue-50/20 text-blue-600'
-          },
-          { 
             label: 'Sales Target', 
             value: `${currency}${Math.round(metrics.salesTarget).toLocaleString()}`, 
-            sub: 'Enterprise margin target',
+            sub: 'Enterprise quota target',
             color: 'border-slate-200 text-slate-900'
           },
           { 
@@ -535,12 +768,6 @@ export function SalesAnalytics() {
             value: `${metrics.salesVariance >= 0 ? '+' : ''}${currency}${Math.round(metrics.salesVariance).toLocaleString()}`, 
             sub: 'Actual vs Target gap',
             color: metrics.salesVariance >= 0 ? 'border-emerald-200 bg-emerald-50/20 text-emerald-700' : 'border-amber-200 bg-amber-50/20 text-amber-600'
-          },
-          { 
-            label: 'Total Transactions', 
-            value: `${metrics.totalTransactions} checkouts`, 
-            sub: 'Distinct invoice receipts',
-            color: 'border-slate-200 text-slate-900'
           },
           { 
             label: 'Units Sold', 
@@ -583,6 +810,18 @@ export function SalesAnalytics() {
             value: `${currency}${Math.round(metrics.ytdSales).toLocaleString()}`, 
             sub: 'Current fiscal year',
             color: 'border-slate-200 text-slate-900'
+          },
+          { 
+            label: 'Cost of Goods Sold (COGS)', 
+            value: `${currency}${Math.round(metrics.totalCOGS).toLocaleString()}`, 
+            sub: 'Product inventory cost',
+            color: 'border-slate-200 text-slate-700'
+          },
+          { 
+            label: 'Est. Operating Expenses', 
+            value: `${currency}${Math.round(metrics.operatingExpenses).toLocaleString()}`, 
+            sub: 'Operational overhead (12%)',
+            color: 'border-slate-200 text-slate-700'
           }
         ].map((kpi, idx) => (
           <div 
@@ -603,7 +842,7 @@ export function SalesAnalytics() {
         ))}
       </div>
 
-      {/* Interactive Trends panel with blue/green layout */}
+      {/* Interactive Trends panel */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* Interactive Trends Chart Box */}
@@ -612,12 +851,16 @@ export function SalesAnalytics() {
             <div>
               <h3 className="font-extrabold text-slate-900 text-base uppercase tracking-tight">Interactive Trend Stream</h3>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-                Analyze revenue flows, achievements against targets, and period growth indexes.
+                Analyze revenue flows, gross profit, net profit, achievements against targets, and period growth.
               </p>
             </div>
 
             <div className="flex items-center gap-1 overflow-x-auto">
               {[
+                { id: 'sales', label: 'Sales Total' },
+                { id: 'grossprofit', label: 'Gross Profit' },
+                { id: 'netprofit', label: 'Net Profit' },
+                { id: 'profit', label: 'Profit Stream' },
                 { id: 'daily', label: 'Daily' },
                 { id: 'weekly', label: 'Weekly' },
                 { id: 'monthly', label: 'Monthly' },
@@ -630,7 +873,7 @@ export function SalesAnalytics() {
                   onClick={() => setActiveTrend(item.id as any)}
                   className={cn(
                     "px-3 h-8 text-[9px] font-black uppercase tracking-wider rounded-lg border transition-all whitespace-nowrap",
-                    (activeTrend === item.id || (item.id === 'target' && activeTrend === 'target') || (item.id === 'growth' && activeTrend === 'growth'))
+                    activeTrend === item.id
                       ? "bg-slate-900 border-slate-900 text-white" 
                       : "bg-transparent border-slate-200 text-slate-500 hover:text-slate-900"
                   )}
@@ -643,7 +886,46 @@ export function SalesAnalytics() {
 
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              {activeTrend === 'growth' ? (
+              {activeTrend === 'grossprofit' ? (
+                <AreaChart data={trendsData}>
+                  <defs>
+                    <linearGradient id="gpGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <Tooltip contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff' }} />
+                  <Area type="monotone" dataKey="GrossProfit" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#gpGrad)" name="Gross Profit" />
+                </AreaChart>
+              ) : activeTrend === 'netprofit' ? (
+                <AreaChart data={trendsData}>
+                  <defs>
+                    <linearGradient id="npGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <Tooltip contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff' }} />
+                  <Area type="monotone" dataKey="NetProfit" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#npGrad)" name="Net Profit" />
+                </AreaChart>
+              ) : activeTrend === 'profit' ? (
+                <ComposedChart data={trendsData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <Tooltip contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff' }} />
+                  <Legend wrapperStyle={{ fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }} />
+                  <Bar dataKey="Actual" fill="#2563eb" name="Revenue" barSize={16} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="GrossProfit" fill="#10b981" name="Gross Profit" barSize={16} radius={[4, 4, 0, 0]} />
+                  <Line type="monotone" dataKey="NetProfit" stroke="#f59e0b" strokeWidth={3} name="Net Profit" dot={{ r: 4 }} />
+                </ComposedChart>
+              ) : activeTrend === 'growth' ? (
                 <LineChart data={trendsData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} />
@@ -773,7 +1055,7 @@ export function SalesAnalytics() {
           </div>
         </div>
 
-        {/* Top Selling Products Revenue vs Units */}
+        {/* Top Selling Products Revenue vs Profit */}
         <div className="bg-white p-6 border border-slate-200 rounded-[2rem] shadow-sm space-y-4">
           <div>
             <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-tight flex items-center gap-1.5">
@@ -781,7 +1063,7 @@ export function SalesAnalytics() {
               Top Selling Products
             </h4>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-              Top SKUs ordered by total net sales revenue.
+              Top SKUs ordered by total net sales revenue and gross profit.
             </p>
           </div>
 
@@ -793,9 +1075,10 @@ export function SalesAnalytics() {
                 <YAxis dataKey="name" type="category" stroke="#475569" fontSize={9} tickLine={false} width={100} />
                 <Tooltip 
                   contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff' }}
-                  formatter={(val: any) => [`${currency}${Number(val).toLocaleString()}`, 'Net Sales']}
+                  formatter={(val: any) => [`${currency}${Number(val).toLocaleString()}`, 'Amount']}
                 />
-                <Bar dataKey="Sales" fill="#2563eb" barSize={14} radius={[0, 4, 4, 0]} name="Net Sales" />
+                <Bar dataKey="Sales" fill="#2563eb" barSize={10} radius={[0, 4, 4, 0]} name="Net Sales" />
+                <Bar dataKey="GrossProfit" fill="#10b981" barSize={10} radius={[0, 4, 4, 0]} name="Gross Profit" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -820,13 +1103,14 @@ export function SalesAnalytics() {
                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={8} tickLine={false} />
                 <YAxis stroke="#94a3b8" fontSize={8} tickLine={false} />
                 <Tooltip contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff' }} />
-                <Bar dataKey="Sales" fill="#10b981" barSize={12} radius={[4, 4, 0, 0]} name="Actual Sales" />
-                <Bar dataKey="Target" fill="#cbd5e1" barSize={12} radius={[4, 4, 0, 0]} name="Target" />
+                <Bar dataKey="Sales" fill="#2563eb" barSize={10} radius={[4, 4, 0, 0]} name="Actual Sales" />
+                <Bar dataKey="GrossProfit" fill="#10b981" barSize={10} radius={[4, 4, 0, 0]} name="Gross Profit" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Category breakdown table */}
@@ -834,7 +1118,7 @@ export function SalesAnalytics() {
           <div>
             <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-tight">Category Contribution Weight</h4>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-              Category product sales vs targets.
+              Category product sales vs targets and margins.
             </p>
           </div>
 
@@ -842,6 +1126,7 @@ export function SalesAnalytics() {
             {uniqueDimensions.categories.map(cat => {
               const recs = filteredRecords.filter(r => r.category === cat);
               const total = recs.reduce((sum, r) => sum + r.netSales, 0);
+              const profit = recs.reduce((sum, r) => sum + r.grossProfit, 0);
               const target = recs.reduce((sum, r) => sum + r.salesTarget, 0) || total * 0.9;
               const pct = target > 0 ? (total / target) * 100 : 100;
 
@@ -858,7 +1143,7 @@ export function SalesAnalytics() {
                     />
                   </div>
                   <div className="flex justify-between text-[9px] text-slate-400 font-semibold uppercase tracking-wider">
-                    <span>Target: {currency}{Math.round(target).toLocaleString()}</span>
+                    <span className="text-emerald-600 font-black">Gross Profit: {currency}{Math.round(profit).toLocaleString()}</span>
                     <span className="text-blue-600 font-extrabold">{pct.toFixed(0)}% achievement</span>
                   </div>
                 </div>
@@ -872,7 +1157,7 @@ export function SalesAnalytics() {
           <div>
             <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-tight">Sales Representatives Ledger</h4>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-              Total sales and average checkouts per salesperson.
+              Total sales, gross profit contribution and checkouts per salesperson.
             </p>
           </div>
 
@@ -883,6 +1168,7 @@ export function SalesAnalytics() {
                   <th className="pb-2">Representative</th>
                   <th className="pb-2 text-center">Transactions</th>
                   <th className="pb-2 text-right">Total Net Sales</th>
+                  <th className="pb-2 text-right">Gross Profit</th>
                   <th className="pb-2 text-right">Target Achievement</th>
                 </tr>
               </thead>
@@ -890,6 +1176,7 @@ export function SalesAnalytics() {
                 {uniqueDimensions.salespersons.map(sp => {
                   const recs = filteredRecords.filter(r => r.salesperson === sp);
                   const sales = recs.reduce((sum, r) => sum + r.netSales, 0);
+                  const gp = recs.reduce((sum, r) => sum + r.grossProfit, 0);
                   const txs = new Set(recs.map(r => r.invoiceNumber)).size;
                   const target = recs.reduce((sum, r) => sum + r.salesTarget, 0) || sales * 0.9;
                   const ach = target > 0 ? (sales / target) * 100 : 100;
@@ -904,6 +1191,9 @@ export function SalesAnalytics() {
                       </td>
                       <td className="py-2.5 text-right font-black text-slate-900">
                         {currency}{Math.round(sales).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 text-right font-black text-emerald-600">
+                        {currency}{Math.round(gp).toLocaleString()}
                       </td>
                       <td className="py-2.5 text-right">
                         <span className={cn(

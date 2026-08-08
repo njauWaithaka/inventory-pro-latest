@@ -27,7 +27,9 @@ export function Demand() {
   const [loading, setLoading] = useState(true);
 
   // Global Interactive Filters
-  const [dateRange, setDateRange] = useState<'30' | '90' | '180' | '365'>('90');
+  const [datePreset, setDatePreset] = useState<'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom' | 'all'>('month');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
   const [branchFilter, setBranchFilter] = useState('All');
   const [regionFilter, setRegionFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -92,9 +94,24 @@ export function Demand() {
 
   // Aggregate stats using strict real-time variables
   const metrics = useMemo(() => {
-    const daysLimit = Number(dateRange);
-    const msLimit = daysLimit * 24 * 60 * 60 * 1000;
     const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Calculate effective daysLimit for velocity calculations
+    let daysLimit = 30;
+    if (datePreset === 'today' || datePreset === 'yesterday') daysLimit = 1;
+    else if (datePreset === 'week') daysLimit = 7;
+    else if (datePreset === 'month') daysLimit = 30;
+    else if (datePreset === 'year') daysLimit = 365;
+    else if (datePreset === 'all') daysLimit = 365;
+    else if (datePreset === 'custom') {
+      if (customStartDate && customEndDate) {
+        const diffMs = Math.abs(new Date(customEndDate).getTime() - new Date(customStartDate).getTime());
+        daysLimit = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+      } else {
+        daysLimit = 30;
+      }
+    }
 
     // 1. Filter products based on global parameters
     const filteredProds = enrichedProducts.filter(p => {
@@ -109,37 +126,108 @@ export function Demand() {
 
     const activeIds = new Set(filteredProds.map(p => p.id));
 
+    // Helper to test if an invoice falls within selected date preset
+    const matchesDateFilter = (inv: any) => {
+      const invDateStr = inv.date || inv.createdAt;
+      if (!invDateStr) return true;
+      const invDate = new Date(invDateStr);
+      if (isNaN(invDate.getTime())) return true;
+
+      if (datePreset === 'today') {
+        return invDate >= todayStart;
+      }
+      if (datePreset === 'yesterday') {
+        const yestStart = new Date(todayStart);
+        yestStart.setDate(yestStart.getDate() - 1);
+        return invDate >= yestStart && invDate < todayStart;
+      }
+      if (datePreset === 'week') {
+        const weekAgo = new Date(todayStart);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return invDate >= weekAgo;
+      }
+      if (datePreset === 'month') {
+        const monthAgo = new Date(todayStart);
+        monthAgo.setDate(monthAgo.getDate() - 30);
+        return invDate >= monthAgo;
+      }
+      if (datePreset === 'year') {
+        const yearStart = new Date(now.getFullYear(), 0, 1);
+        return invDate >= yearStart;
+      }
+      if (datePreset === 'custom') {
+        if (customStartDate && new Date(invDateStr) < new Date(customStartDate)) return false;
+        if (customEndDate) {
+          const end = new Date(customEndDate);
+          end.setHours(23, 59, 59, 999);
+          if (new Date(invDateStr) > end) return false;
+        }
+        return true;
+      }
+      if (datePreset === 'all') return true;
+      return true;
+    };
+
     // 2. Filter Invoices
     const filteredInvoices = invoices.filter(inv => {
-      const date = inv.date ? new Date(inv.date) : new Date(inv.createdAt);
-      if (now.getTime() - date.getTime() > msLimit) return false;
+      if (!matchesDateFilter(inv)) return false;
+      if (filteredProds.length === enrichedProducts.length) return true;
       return inv.items?.some((it: any) => activeIds.has(it.productId));
     });
 
-    // Units Sold (Demand proxy) & Daily velocity calculations
+    // Units Sold (Demand proxy), Daily velocity & Profitability calculations
     const salesStats: Record<string, { qty: number; value: number }> = {};
     let todayDemand = 0;
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfTodayMs = todayStart.getTime();
+
+    let totalDemandSales = 0;
+    let totalDemandCOGS = 0;
 
     filteredInvoices.forEach(inv => {
-      const date = inv.date ? new Date(inv.date) : new Date(inv.createdAt);
-      const isToday = date.getTime() >= startOfToday;
+      const invDateStr = inv.date || inv.createdAt;
+      const invDate = invDateStr ? new Date(invDateStr) : now;
+      const isToday = invDate.getTime() >= startOfTodayMs;
 
-      inv.items?.forEach((it: any) => {
-        if (!activeIds.has(it.productId)) return;
+      const items = inv.items || [];
+      if (items.length === 0) {
+        const amt = Number(inv.amount) || 0;
+        totalDemandSales += amt;
+        totalDemandCOGS += amt * 0.65;
+      } else {
+        items.forEach((it: any) => {
+          if (filteredProds.length < enrichedProducts.length && !activeIds.has(it.productId)) return;
 
-        const qty = Number(it.quantity) || 0;
-        const price = Number(it.price || it.unitPrice) || 0;
+          const qty = Number(it.quantity) || 1;
+          const price = Number(it.price || it.unitPrice) || 0;
+          const lineTotal = Number(it.total) || qty * price;
 
-        if (!salesStats[it.productId]) {
-          salesStats[it.productId] = { qty: 0, value: 0 };
-        }
-        salesStats[it.productId].qty += qty;
-        salesStats[it.productId].value += qty * price;
+          totalDemandSales += lineTotal;
 
-        if (isToday) todayDemand += qty;
-      });
+          const prod = enrichedProducts.find(p => p.id === it.productId || p.sku === it.sku);
+          let unitCost = Number(prod?.buyingPrice || prod?.value || it.buyingPrice || it.cost || 0);
+          if (unitCost <= 0) {
+            unitCost = price > 0 ? price * 0.65 : lineTotal * 0.65;
+          }
+          totalDemandCOGS += qty * unitCost;
+
+          if (it.productId) {
+            if (!salesStats[it.productId]) {
+              salesStats[it.productId] = { qty: 0, value: 0 };
+            }
+            salesStats[it.productId].qty += qty;
+            salesStats[it.productId].value += lineTotal;
+          }
+
+          if (isToday) todayDemand += qty;
+        });
+      }
     });
+
+    const demandGrossProfit = totalDemandSales - totalDemandCOGS;
+    const demandGrossMarginPct = totalDemandSales > 0 ? (demandGrossProfit / totalDemandSales) * 100 : 0;
+    const demandOperatingExpenses = Math.round(totalDemandSales * 0.12);
+    const demandNetProfit = demandGrossProfit - demandOperatingExpenses;
+    const demandNetMarginPct = totalDemandSales > 0 ? (demandNetProfit / totalDemandSales) * 100 : 0;
 
     // Dynamic Velocity and Stock Coverage
     let fastMoving = 0;
@@ -294,9 +382,14 @@ export function Demand() {
       demandSupplyGap,
       totalUnitsSold,
       xyzDistribution,
-      matrixGrid
+      matrixGrid,
+      totalDemandSales,
+      demandGrossProfit,
+      demandGrossMarginPct,
+      demandNetProfit,
+      demandNetMarginPct
     };
-  }, [enrichedProducts, invoices, purchaseOrders, dateRange, categoryFilter, brandFilter, branchFilter, regionFilter, productFilter, supplierFilter]);
+  }, [enrichedProducts, invoices, purchaseOrders, datePreset, customStartDate, customEndDate, categoryFilter, brandFilter, branchFilter, regionFilter, productFilter, supplierFilter]);
 
   // Unique lists for global dropdowns
   const filterDropdowns = useMemo(() => {
@@ -385,98 +478,191 @@ export function Demand() {
       </div>
 
       {/* Global Interactive Filters with elegant white inputs */}
-      <div className="p-5 bg-slate-50 border border-slate-200/60 rounded-[1.5rem] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 shadow-sm">
-        <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Date Horizon</label>
-          <select 
-            value={dateRange} 
-            onChange={(e: any) => setDateRange(e.target.value)}
-            className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all"
-          >
-            <option value="30">Last 30 Days</option>
-            <option value="90">Last 90 Days</option>
-            <option value="180">Last 6 Months</option>
-            <option value="365">Last 12 Months</option>
-          </select>
+      <div className="p-5 bg-slate-50 border border-slate-200/60 rounded-[1.5rem] space-y-4 shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Date Horizon</label>
+            <select 
+              value={datePreset} 
+              onChange={(e: any) => setDatePreset(e.target.value)}
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all"
+            >
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="week">This Week (7 Days)</option>
+              <option value="month">This Month (30 Days)</option>
+              <option value="year">This Year (2026)</option>
+              <option value="custom">Custom Date Range</option>
+              <option value="all">All Time</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Branch</label>
+            <select 
+              value={branchFilter} 
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all"
+            >
+              <option value="All">All Branches</option>
+              <option value="Nairobi CBD">Nairobi CBD</option>
+              <option value="Mombasa Road">Mombasa Road</option>
+              <option value="Kisumu City">Kisumu City</option>
+              <option value="Nakuru Town">Nakuru Town</option>
+              <option value="Eldoret">Eldoret</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Region</label>
+            <select 
+              value={regionFilter} 
+              onChange={(e) => setRegionFilter(e.target.value)}
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all"
+            >
+              <option value="All">All Regions</option>
+              <option value="Nairobi Region">Nairobi Region</option>
+              <option value="Coast Region">Coast Region</option>
+              <option value="Nyanza Region">Nyanza Region</option>
+              <option value="Rift Valley Region">Rift Valley Region</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Category</label>
+            <select 
+              value={categoryFilter} 
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
+            >
+              <option value="All">All Categories</option>
+              {filterDropdowns.categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Brand</label>
+            <select 
+              value={brandFilter} 
+              onChange={(e) => setBrandFilter(e.target.value)}
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
+            >
+              <option value="All">All Brands</option>
+              {filterDropdowns.brands.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Product</label>
+            <select 
+              value={productFilter} 
+              onChange={(e) => setProductFilter(e.target.value)}
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
+            >
+              <option value="All">All Products</option>
+              {enrichedProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Supplier</label>
+            <select 
+              value={supplierFilter} 
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
+            >
+              <option value="All">All Suppliers</option>
+              {filterDropdowns.suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Branch</label>
-          <select 
-            value={branchFilter} 
-            onChange={(e) => setBranchFilter(e.target.value)}
-            className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all"
-          >
-            <option value="All">All Branches</option>
-            <option value="Nairobi CBD">Nairobi CBD</option>
-            <option value="Mombasa Road">Mombasa Road</option>
-            <option value="Kisumu City">Kisumu City</option>
-            <option value="Nakuru Town">Nakuru Town</option>
-            <option value="Eldoret">Eldoret</option>
-          </select>
+        {/* Quick Date Range Pills & Custom Date Picker */}
+        <div className="pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Quick Date Filters:</span>
+            {[
+              { id: 'today', label: 'Today' },
+              { id: 'yesterday', label: 'Yesterday' },
+              { id: 'week', label: 'This Week' },
+              { id: 'month', label: 'This Month' },
+              { id: 'year', label: 'This Year' },
+              { id: 'custom', label: 'Custom Date' },
+              { id: 'all', label: 'All Time' }
+            ].map((btn) => (
+              <button
+                key={btn.id}
+                onClick={() => setDatePreset(btn.id as any)}
+                className={cn(
+                  "px-3 py-1 text-[10px] font-black rounded-lg border transition-all uppercase tracking-wider",
+                  datePreset === btn.id
+                    ? "bg-slate-900 border-slate-900 text-white shadow-sm"
+                    : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                )}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
+
+          {datePreset === 'custom' && (
+            <div className="flex items-center gap-2 bg-white p-1.5 border border-slate-200 rounded-xl">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">From:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="h-7 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
+              />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">To:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="h-7 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Demand Sales & Profitability Hero Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-5 bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-[1.5rem] shadow-md relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">Total Sales from Demand</span>
+            <span className="px-2 py-0.5 bg-white/20 text-white text-[9px] font-extrabold rounded-full uppercase">REVENUE</span>
+          </div>
+          <p className="text-3xl font-black mt-2 tracking-tight">
+            {currency}{Math.round(metrics.totalDemandSales).toLocaleString()}
+          </p>
+          <p className="text-xs text-blue-100 font-medium mt-1">Total fulfilled sales revenue for selected period</p>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Region</label>
-          <select 
-            value={regionFilter} 
-            onChange={(e) => setRegionFilter(e.target.value)}
-            className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all"
-          >
-            <option value="All">All Regions</option>
-            <option value="Nairobi Region">Nairobi Region</option>
-            <option value="Coast Region">Coast Region</option>
-            <option value="Nyanza Region">Nyanza Region</option>
-            <option value="Rift Valley Region">Rift Valley Region</option>
-          </select>
+        <div className="p-5 bg-gradient-to-br from-emerald-600 to-teal-800 text-white rounded-[1.5rem] shadow-md relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-200">Demand Gross Profit</span>
+            <span className="px-2.5 py-0.5 bg-white/20 text-white text-[9px] font-extrabold rounded-full uppercase">
+              {metrics.demandGrossMarginPct.toFixed(1)}% MARGIN
+            </span>
+          </div>
+          <p className="text-3xl font-black mt-2 tracking-tight">
+            {currency}{Math.round(metrics.demandGrossProfit).toLocaleString()}
+          </p>
+          <p className="text-xs text-emerald-100 font-medium mt-1">Gross revenue minus cost of goods sold (COGS)</p>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Category</label>
-          <select 
-            value={categoryFilter} 
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
-          >
-            <option value="All">All Categories</option>
-            {filterDropdowns.categories.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Brand</label>
-          <select 
-            value={brandFilter} 
-            onChange={(e) => setBrandFilter(e.target.value)}
-            className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
-          >
-            <option value="All">All Brands</option>
-            {filterDropdowns.brands.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Product</label>
-          <select 
-            value={productFilter} 
-            onChange={(e) => setProductFilter(e.target.value)}
-            className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
-          >
-            <option value="All">All Products</option>
-            {enrichedProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Supplier</label>
-          <select 
-            value={supplierFilter} 
-            onChange={(e) => setSupplierFilter(e.target.value)}
-            className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
-          >
-            <option value="All">All Suppliers</option>
-            {filterDropdowns.suppliers.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+        <div className="p-5 bg-gradient-to-br from-indigo-700 to-slate-900 text-white rounded-[1.5rem] shadow-md relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-200">Demand Net Profit</span>
+            <span className="px-2.5 py-0.5 bg-white/20 text-white text-[9px] font-extrabold rounded-full uppercase">
+              {metrics.demandNetMarginPct.toFixed(1)}% MARGIN
+            </span>
+          </div>
+          <p className="text-3xl font-black mt-2 tracking-tight">
+            {currency}{Math.round(metrics.demandNetProfit).toLocaleString()}
+          </p>
+          <p className="text-xs text-indigo-100 font-medium mt-1">Gross profit minus operating overhead costs</p>
         </div>
       </div>
 

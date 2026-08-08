@@ -110,24 +110,6 @@ const menuGroups = [
     ],
   },
   {
-    id: "production",
-    label: "Production",
-    icon: Factory,
-    children: [
-      { id: "bom" as ViewType, label: "Bills of Materials", icon: Boxes },
-      { id: "production_planning" as ViewType, label: "Production Planning", icon: Calendar },
-      { id: "mrp" as ViewType, label: "Material Requirements (MRP)", icon: Scale },
-      { id: "material_requisitions" as ViewType, label: "Material Requisitions", icon: FileText },
-      { id: "material_issue" as ViewType, label: "Material Issue", icon: ClipboardList },
-      { id: "production_orders" as ViewType, label: "Production Orders", icon: Factory },
-      { id: "wip" as ViewType, label: "Work In Progress (WIP)", icon: Layers },
-      { id: "production_output" as ViewType, label: "Production Output", icon: Package },
-      { id: "quality_control" as ViewType, label: "Quality Control", icon: ShieldCheck },
-      { id: "cost_analysis" as ViewType, label: "Cost Analysis", icon: DollarSign },
-      { id: "production_analytics" as ViewType, label: "Production Analytics", icon: BarChart3 },
-    ],
-  },
-  {
     id: "contacts",
     label: "Contacts",
     icon: Contact,
@@ -232,7 +214,6 @@ export function Sidebar({
   >({
     sales: false,
     procurement: false,
-    production: false,
     contacts: false,
     insights: false,
   });
