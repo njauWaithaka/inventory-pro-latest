@@ -5,6 +5,8 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, ScatterChart, Scatter, ZAxis, Legend
 } from 'recharts';
 import { cn, formatCompactNumber, getSellThroughRate, getProductMovementSpeed } from '../../lib/utils';
+import { ABCAnalysisSection } from './ABCAnalysisSection';
+import { SKUMovementDashboard } from './SKUMovementDashboard';
 import { 
   calculateStockTurnover, 
   calculateMonthlyTurnoverTrend, 
@@ -610,95 +612,18 @@ export function Analytics() {
           </div>
         </div>
 
-        {/* Existing Analysis Progress Visualizations */}
-        <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-8 text-left">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-black text-slate-900 tracking-tight">Stock Movement Analysis</h3>
-              <p className="text-xs font-semibold text-slate-500 mt-1">Inventory categorized by sales velocity</p>
-            </div>
-            <div className="bg-slate-50 px-4 sm:px-5 py-2 sm:py-3 rounded-2xl border border-slate-100 sm:min-w-[200px]">
-              <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Inventory Value</p>
-              <p className="text-lg sm:text-xl font-black text-slate-900">
-                <span className="sm:hidden">{formatCompactNumber(totalCapital, currency)}</span>
-                <span className="hidden sm:inline">{currency}{totalCapital.toLocaleString()}</span>
-              </p>
-            </div>
-          </div>
-          
-          <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
-            {MOVEMENT_DATA.map((segment, i) => (
-              <motion.div 
-                key={i} 
-                initial={{ width: 0 }}
-                animate={{ width: `${segment.percentage}%` }}
-                className={cn("h-full transition-all duration-1000", segment.color)} 
-                title={`${segment.name}: ${segment.percentage}%`}
-              />
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-            {MOVEMENT_DATA.map((item, i) => (
-              <motion.div 
-                key={i} 
-                whileHover={{ y: -4 }}
-                className="p-4 sm:p-5 bg-slate-50/50 border border-slate-100 rounded-2xl flex flex-col justify-between hover:bg-white hover:border-slate-200 hover:shadow-md transition-all duration-300 relative overflow-hidden"
-              >
-                <div className="space-y-3 sm:space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className={cn("w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-white shadow-sm", item.color)}>
-                      <item.icon className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">{item.name}</p>
-                    <h4 className="text-sm sm:text-base font-black text-slate-900 leading-none">
-                      {formatCompactNumber(item.value, currency)}
-                    </h4>
-                  </div>
-
-                  <div className="mt-6 pt-4 border-t border-slate-100/50">
-                    <div className="flex justify-between items-center mb-1">
-                      <p className="text-xs font-bold text-slate-700">{item.items.toLocaleString()} items</p>
-                      <p className={cn("text-[11px] font-black", item.color.replace('bg-', 'text-'))}>{item.percentage}%</p>
-                    </div>
-                    <p className="text-[10px] font-medium text-slate-400 leading-tight">{item.desc}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+        {/* Automatic SKU Movement Classification & Inventory Aging Dashboard */}
+        <div className="lg:col-span-2">
+          <SKUMovementDashboard 
+            products={allProducts} 
+            movements={stockMovements} 
+            currency={currency} 
+          />
         </div>
 
-        {/* ABC Analysis */}
-        <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h3 className="text-lg font-extrabold text-slate-900">ABC Analysis</h3>
-              <p className="text-xs font-medium text-slate-400 mt-0.5">Value-based inventory classification</p>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            {abcAnalysis.map((item, i) => (
-              <div key={i} className="space-y-3 pb-6 border-b border-slate-50 last:border-0 last:pb-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={cn("w-2 h-2 rounded-full", item.color)} />
-                    <span className="text-sm font-bold text-slate-900">Class {item.class}</span>
-                  </div>
-                  <span className="text-sm font-black text-slate-900">{currency}{item.val.toLocaleString()}</span>
-                </div>
-                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">{item.desc}</p>
-                <div className="flex items-center gap-4 text-[10px] font-bold text-left">
-                  <span className="text-slate-400">Items: <span className="text-slate-900">{item.items.length}</span> <span className="text-slate-400 font-medium tracking-tight">({totalSKUs > 0 ? Math.round((item.items.length/totalSKUs)*100) : 0}%)</span></span>
-                  <span className="text-slate-400">Value: <span className="text-blue-600">{totalCapital > 0 ? Math.round((item.val/totalCapital)*100) : 0}%</span></span>
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* ABC Analysis Section */}
+        <div className="lg:col-span-2">
+          <ABCAnalysisSection products={allProducts} currency={currency} />
         </div>
 
         {/* Sell-Through Rate (STR) Performance */}

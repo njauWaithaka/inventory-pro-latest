@@ -464,7 +464,7 @@ export function Sidebar({
   );
 }
 
-export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
+export function Navbar({ onMenuClick, currentView }: { onMenuClick: () => void; currentView?: ViewType }) {
   const { user, profile, logout } = useAuth();
   const title = user?.displayName || user?.email?.split("@")[0] || "User";
   const [activeAlertCount, setActiveAlertCount] = useState(0);
@@ -484,35 +484,56 @@ export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
     return () => unsubscribe();
   }, [profile?.companyId]);
 
+  const isPOS = currentView === "pos";
+
   return (
-    <header className="sticky top-0 z-30 bg-brand-header border-b border-brand-border h-16 flex items-center px-4 sm:px-6 lg:px-8">
+    <header className={cn(
+      "sticky top-0 z-30 h-16 flex items-center px-4 sm:px-6 lg:px-8 transition-colors duration-200",
+      isPOS
+        ? "bg-slate-950 border-b border-slate-800 text-slate-100"
+        : "bg-brand-header border-b border-brand-border text-slate-900"
+    )}>
       <div className="flex items-center gap-4 flex-1">
         <button
           onClick={onMenuClick}
-          className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+          className={cn(
+            "md:hidden p-2 rounded-lg transition-colors",
+            isPOS ? "text-slate-300 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"
+          )}
         >
           <Menu className="w-6 h-6" />
         </button>
 
         <div className="relative flex-1 max-w-[200px] sm:max-w-sm group text-left">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors" />
+          <Search className={cn("absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors", isPOS ? "text-slate-500" : "text-slate-400")} />
           <input
             type="text"
             placeholder="Search..."
-            className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg bg-slate-100 text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition-all placeholder-slate-400"
+            className={cn(
+              "w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none transition-all",
+              isPOS
+                ? "bg-slate-900 border-slate-800 text-slate-100 focus:border-emerald-500 focus:bg-slate-900 placeholder-slate-500"
+                : "bg-slate-100 border-slate-200 text-slate-900 focus:border-blue-500 focus:bg-white placeholder-slate-400"
+            )}
           />
         </div>
       </div>
 
       <div className="flex items-center gap-3 sm:gap-4 ml-4">
         <div className="relative group">
-          <button className="p-2.5 text-slate-500 hover:bg-slate-100 hover:text-blue-600 rounded-full relative transition-all duration-300 transform group-hover:scale-105 group-active:scale-95">
+          <button className={cn(
+            "p-2.5 rounded-full relative transition-all duration-300 transform group-hover:scale-105 group-active:scale-95",
+            isPOS ? "text-slate-300 hover:bg-slate-800 hover:text-emerald-400" : "text-slate-500 hover:bg-slate-100 hover:text-blue-600"
+          )}>
             <Bell className="w-5 h-5 transition-transform duration-300" />
 
             {activeAlertCount > 0 && (
               <span className="absolute top-2 right-2 flex h-4 w-4">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex items-center justify-center rounded-full h-4 w-4 bg-rose-500 text-[9px] font-black text-white shadow-sm ring-2 ring-white overflow-hidden">
+                <span className={cn(
+                  "relative inline-flex items-center justify-center rounded-full h-4 w-4 bg-rose-500 text-[9px] font-black text-white shadow-sm ring-2 overflow-hidden",
+                  isPOS ? "ring-slate-950" : "ring-white"
+                )}>
                   {activeAlertCount}
                 </span>
               </span>
@@ -520,12 +541,12 @@ export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
           </button>
         </div>
 
-        <div className="flex items-center gap-2 group border-l border-slate-100 pl-4 ml-1 sm:ml-0 relative">
+        <div className={cn("flex items-center gap-2 group border-l pl-4 ml-1 sm:ml-0 relative", isPOS ? "border-slate-800" : "border-slate-100")}>
           <div className="hidden lg:block text-right">
-            <p className="text-[13px] font-bold text-slate-900 leading-none capitalize">
+            <p className={cn("text-[13px] font-bold leading-none capitalize", isPOS ? "text-slate-100" : "text-slate-900")}>
               {title}
             </p>
-            <p className="text-[10px] text-slate-500 mt-1">Inventory Manager</p>
+            <p className={cn("text-[10px] mt-1", isPOS ? "text-slate-400" : "text-slate-500")}>Inventory Manager</p>
           </div>
           <button
             onClick={() => {
@@ -533,7 +554,10 @@ export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
                 logout();
               }
             }}
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-200 flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden shrink-0 hover:ring-2 hover:ring-blue-500 transition-all group"
+            className={cn(
+              "w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border shadow-sm overflow-hidden shrink-0 transition-all group",
+              isPOS ? "bg-slate-800 border-slate-700 hover:ring-2 hover:ring-emerald-500" : "bg-slate-200 border-slate-100 hover:ring-2 hover:ring-blue-500"
+            )}
             title="Log out"
           >
             {user?.photoURL ? (
@@ -544,7 +568,7 @@ export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <User className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600 group-hover:text-blue-600" />
+              <User className={cn("w-4 h-4 sm:w-5 sm:h-5", isPOS ? "text-slate-300 group-hover:text-emerald-400" : "text-slate-600 group-hover:text-blue-600")} />
             )}
           </button>
         </div>

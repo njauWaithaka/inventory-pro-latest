@@ -47,7 +47,18 @@ import { Mail, Lock, User as UserIcon } from 'lucide-react';
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1280 : false);
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1280) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const { user, loading: authLoading, loginWithEmail, registerWithEmail, loginDemo, connectionError } = useAuth();
   const { profile, company, loading: settingsLoading, createCompany } = useSettings();
   const [companyName, setCompanyName] = useState('');
@@ -299,7 +310,12 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg text-slate-900 antialiased font-sans flex flex-col selection:bg-blue-100 selection:text-blue-900">
+    <div className={cn(
+      "min-h-screen antialiased font-sans flex flex-col transition-colors duration-200",
+      currentView === 'pos' 
+        ? "bg-slate-950 text-slate-100 selection:bg-emerald-900 selection:text-emerald-100" 
+        : "bg-brand-bg text-slate-900 selection:bg-blue-100 selection:text-blue-900"
+    )}>
       <Sidebar 
         currentView={currentView} 
         onViewChange={setCurrentView} 
@@ -314,7 +330,7 @@ function AppContent() {
         isSidebarCollapsed ? "md:pl-[64px]" : "md:pl-[260px]",
         "pl-0"
       )}>
-        <Navbar onMenuClick={() => setIsSidebarOpen(true)} />
+        <Navbar onMenuClick={() => setIsSidebarOpen(true)} currentView={currentView} />
         
         <main className="flex-1 px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 lg:px-8 lg:pt-4 lg:pb-8 xl:px-10 xl:pt-4 xl:pb-10 mb-20 lg:mb-0 w-full mx-auto min-w-0">
           <AnimatePresence mode="wait">

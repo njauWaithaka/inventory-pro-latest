@@ -3,7 +3,6 @@ import {
   TrendingUp,
   TrendingDown,
   DollarSign,
-  RefreshCcw,
   Package,
   AlertTriangle,
   Boxes,
@@ -30,6 +29,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { cn, formatCompactNumber, getProductMovementSpeed } from "../../lib/utils";
+import { ABCAnalysisSection } from "./ABCAnalysisSection";
 import {
   calculateStockTurnover,
   calculateMonthlyTurnoverTrend,
@@ -178,6 +178,7 @@ export function Dashboard({
     );
     let totalSales = 0;
     let totalCOGS = 0;
+    let totalUnitsSold = 0;
 
     salesInvoices.forEach((inv) => {
       const items = inv.items || [];
@@ -185,12 +186,14 @@ export function Dashboard({
         const amt = Number(inv.amount) || 0;
         totalSales += amt;
         totalCOGS += amt * 0.65;
+        totalUnitsSold += 1;
       } else {
         items.forEach((it: any) => {
           const qty = Number(it.quantity) || 1;
           const price = Number(it.price) || Number(it.unitPrice) || 0;
           const net = Number(it.total) || qty * price;
           totalSales += net;
+          totalUnitsSold += qty;
 
           const prod = products.find(
             (p) => p.id === it.productId || p.sku === it.sku
@@ -212,11 +215,23 @@ export function Dashboard({
     const netMarginPct =
       totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
 
+    const totalCurrentStock = products.reduce(
+      (sum, p) => sum + (Number(p.quantity) || 0),
+      0
+    );
+    const totalBeginningStock = totalUnitsSold + totalCurrentStock;
+    const sellThroughRate =
+      totalBeginningStock > 0
+        ? (totalUnitsSold / totalBeginningStock) * 100
+        : 0;
+
     return {
       totalSales,
       netProfit,
       netMarginPct,
       salesCount: salesInvoices.length,
+      totalUnitsSold,
+      sellThroughRate,
     };
   }, [invoices, products]);
 
@@ -395,39 +410,6 @@ export function Dashboard({
     }, [])
     .sort((a, b) => b.value - a.value);
 
-  // Dynamic Stock Turnover Calculation
-  const stockTurnoverCalc = useMemo(() => {
-    const range = getDateRangeForPeriod('This Month');
-    const stats = calculateStockTurnover(products, stockMovements, range);
-    const ratio = stats.overallRatio;
-
-    // Compare with trend data
-    const values = turnoverRatioData.map(d => d.turnover);
-    const midIdx = Math.floor(values.length / 2);
-    const firstHalf = values.slice(0, midIdx);
-    const secondHalf = values.slice(midIdx);
-    
-    const firstAvg = firstHalf.length > 0 ? firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length : 0;
-    const secondAvg = secondHalf.length > 0 ? secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length : ratio;
-
-    const percentChange = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg) * 100 : (secondAvg === 0 ? 0 : 8.3);
-    const isPositive = percentChange >= 0;
-    const sign = isPositive ? "+" : "";
-
-    let badgeText = "HEALTHY";
-    if (ratio >= 4.0) {
-      badgeText = "EXCELLENT";
-    } else if (ratio < 1.5) {
-      badgeText = "LOW TURNOVER";
-    }
-
-    return {
-      value: `${ratio.toFixed(1)}x`,
-      subtitle: `${sign}${percentChange.toFixed(1)}% vs prior period`,
-      badgeText
-    };
-  }, [products, stockMovements, turnoverRatioData]);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F5F7FB]">
@@ -479,6 +461,14 @@ export function Dashboard({
             badgeText="REVENUE"
           />
           <SummaryCard
+            title="Sell-Through Rate"
+            value={`${salesMetrics.sellThroughRate.toFixed(1)}%`}
+            subtitle={`${salesMetrics.totalUnitsSold.toLocaleString()} units sold`}
+            icon={Percent}
+            gradient="from-[#8B5CF6] to-[#6D28D9]"
+            badgeText="EFFICIENCY"
+          />
+          <SummaryCard
             title="Net Profit"
             value={`${currency}${Math.round(salesMetrics.netProfit).toLocaleString()}`}
             subtitle={`${salesMetrics.netMarginPct.toFixed(1)}% net margin`}
@@ -486,307 +476,10 @@ export function Dashboard({
             gradient="from-[#10B981] to-[#047857]"
             badgeText="NET MARGIN"
           />
-          <SummaryCard
-            title="Stock Turnover"
-            value={stockTurnoverCalc.value}
-            subtitle={stockTurnoverCalc.subtitle}
-            icon={RefreshCcw}
-            gradient="from-[#23AFA5] to-[#31C5B5]"
-            badgeText={stockTurnoverCalc.badgeText}
-          />
         </div>
 
-        {/* ABC ANALYTICS PANEL */}
-        <div className="bg-white border border-[#DDE5F0] rounded-xl shadow-sm p-6 lg:p-8 space-y-6 text-left shrink-0 min-w-0">
-          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-4 gap-4">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-emerald-50 text-[10px] font-black text-[#2AB7A9] uppercase tracking-widest mb-1.5">
-                Pareto optimization
-              </div>
-              <h2 className="text-xl font-bold text-[#06132B]">
-                ABC Analytics Panel
-              </h2>
-              <p className="text-sm text-[#526789]">
-                Strategic inventory valuation and optimal class categorization
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {abcDisplay.map((item) => (
-                <div
-                  key={item.class}
-                  className="flex items-center gap-2 bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-1.5 rounded-xl"
-                >
-                  <div
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="font-bold text-[#06132B] text-xs uppercase tracking-tight">
-                    {item.name}: {item.valuePercentage}% Value
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch min-w-0 w-full">
-            {/* Pareto Chart: Centerpiece (7 cols) */}
-            <div className="lg:col-span-7 bg-[#F8FAFC] border border-slate-100 rounded-xl p-5 md:p-6 flex flex-col justify-between min-w-0">
-              <div className="mb-4">
-                <span className="text-[10px] font-black text-[#526789] uppercase tracking-widest block mb-1">
-                  Pareto Distribution (Top SKUs)
-                </span>
-                <p className="text-xs text-[#526789]">
-                  The 80/20 Rule: Trace the vital few items contributing to the
-                  majority of your total capital investment.
-                </p>
-              </div>
-              <div className="h-[280px] w-full mt-2">
-                {paretoData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart
-                      data={paretoData}
-                      margin={{ top: 10, right: 10, left: -10, bottom: 20 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#E2E8F0"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="name"
-                        tick={{ fontSize: 9, fontWeight: 700, fill: "#64748b" }}
-                        axisLine={false}
-                        tickLine={false}
-                        angle={-15}
-                        textAnchor="end"
-                      />
-                      <YAxis
-                        yAxisId="left"
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(val) =>
-                          `${currency}${formatCompactNumber(val, "")}`
-                        }
-                        tick={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          fill: "#64748b",
-                        }}
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        domain={[0, 100]}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(val) => `${val}%`}
-                        tick={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          fill: "#64748b",
-                        }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: "12px",
-                          border: "1px solid #e2e8f0",
-                          boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                        }}
-                        formatter={(value: any, name: any) => {
-                          if (name === "Value")
-                            return [
-                              `${currency}${Number(value).toLocaleString()}`,
-                              "Value",
-                            ];
-                          return [`${value}%`, "Cumulative %"];
-                        }}
-                      />
-                      <Legend
-                        verticalAlign="top"
-                        height={36}
-                        iconType="circle"
-                        wrapperStyle={{ fontSize: "11px", fontWeight: 700 }}
-                      />
-                      <Bar
-                        yAxisId="left"
-                        dataKey="Value"
-                        fill="#2AB7A9"
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={30}
-                      />
-                      <Line
-                        yAxisId="right"
-                        type="monotone"
-                        dataKey="Cumulative %"
-                        stroke="#EF4444"
-                        strokeWidth={3}
-                        dot={{ r: 4, strokeWidth: 1 }}
-                        activeDot={{ r: 6 }}
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                    No active stock values.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Distribution Charts Side Panel (5 cols) */}
-            <div className="lg:col-span-5 flex flex-col gap-4 min-w-0">
-              <div className="grid grid-cols-2 gap-4 flex-1">
-                {/* Value Bar Chart */}
-                <div className="bg-[#F8FAFC] border border-slate-100 rounded-xl p-4 flex flex-col justify-between min-w-0">
-                  <div>
-                    <span className="text-[10px] font-black text-[#526789] uppercase tracking-widest block mb-2">
-                      Absolute Value
-                    </span>
-                    <div className="h-[120px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={abcDisplay}
-                          margin={{ top: 10, right: 5, left: -25, bottom: 0 }}
-                        >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            vertical={false}
-                            stroke="#E2E8F0"
-                          />
-                          <XAxis
-                            dataKey="class"
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fontSize: 10, fontWeight: 700 }}
-                          />
-                          <YAxis
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fontSize: 9 }}
-                            tickFormatter={(v) => formatCompactNumber(v, "")}
-                          />
-                          <Tooltip
-                            formatter={(value: number) => [
-                              `${currency}${value.toLocaleString()}`,
-                              "Value",
-                            ]}
-                          />
-                          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                            {abcDisplay.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                  <div className="text-center pt-2">
-                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                      Asset Value by Class
-                    </span>
-                  </div>
-                </div>
-
-                {/* Value Allocation Pie Chart */}
-                <div className="bg-[#F8FAFC] border border-slate-100 rounded-xl p-4 flex flex-col justify-between min-w-0">
-                  <div>
-                    <span className="text-[10px] font-black text-[#526789] uppercase tracking-widest block mb-2">
-                      Revenue Share %
-                    </span>
-                    <div className="h-[120px] w-full relative flex items-center justify-center">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={abcDisplay}
-                            dataKey="value"
-                            innerRadius={30}
-                            outerRadius={45}
-                            paddingAngle={3}
-                            stroke="none"
-                          >
-                            {abcDisplay.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            formatter={(value: number) => [
-                              `${totalCapital > 0 ? Math.round((value / totalCapital) * 100) : 0}%`,
-                              "Share",
-                            ]}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                          Cap
-                        </span>
-                        <span className="text-[11px] font-black text-slate-800 leading-none mt-0.5">
-                          {formatCompactNumber(totalCapital, currency)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-center pt-2">
-                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                      Capital weight allocation
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Strategic Interpretations */}
-              <div className="bg-[#06132B] text-white rounded-xl p-5 space-y-3.5 flex-1 flex flex-col justify-center">
-                <span className="text-[10px] font-black text-[#2AB7A9] uppercase tracking-widest block mb-1">
-                  Strategic Action Guide
-                </span>
-                <div className="space-y-3">
-                  <div className="text-left">
-                    <div className="flex items-center gap-1.5 leading-none">
-                      <span className="w-2 h-2 rounded-full bg-[#2AB7A9]"></span>
-                      <span className="text-xs font-bold text-[#2AB7A9]">
-                        Class A ({abcDisplay[0]?.itemPercentage}% SKUs →{" "}
-                        {abcDisplay[0]?.valuePercentage}% Capital)
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-300 ml-3.5 mt-0.5 font-medium leading-relaxed font-sans">
-                      Tight control • Frequent monitoring • Low tolerance for
-                      stockouts
-                    </p>
-                  </div>
-
-                  <div className="text-left">
-                    <div className="flex items-center gap-1.5 leading-none">
-                      <span className="w-2 h-2 rounded-full bg-[#2F80ED]"></span>
-                      <span className="text-xs font-bold text-[#2F80ED]">
-                        Class B ({abcDisplay[1]?.itemPercentage}% SKUs →{" "}
-                        {abcDisplay[1]?.valuePercentage}% Capital)
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-300 ml-3.5 mt-0.5 font-medium leading-relaxed font-sans">
-                      Your biggest value driver • Optimize ordering cycles •
-                      Upgrade select products to Class A
-                    </p>
-                  </div>
-
-                  <div className="text-left">
-                    <div className="flex items-center gap-1.5 leading-none">
-                      <span className="w-2 h-2 rounded-full bg-slate-600"></span>
-                      <span className="text-xs font-bold text-slate-300">
-                        Class C ({abcDisplay[2]?.itemPercentage}% SKUs →{" "}
-                        {abcDisplay[2]?.valuePercentage}% Capital)
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-300 ml-3.5 mt-0.5 font-medium leading-relaxed font-sans">
-                      Automate • Bulk ordering • Minimize administrative and
-                      storage overhead
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* ABC / PARETO ANALYSIS SECTION */}
+        <ABCAnalysisSection products={allProducts} currency={currency} />
 
         {/* Main Sections Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-w-0">
@@ -1075,18 +768,18 @@ function SummaryCard({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       className={cn(
-        "relative rounded-xl p-6 min-h-[125px] overflow-hidden shadow-sm flex flex-col justify-between text-left",
+        "relative rounded-xl p-4 sm:p-6 min-h-[125px] overflow-hidden shadow-sm flex flex-col justify-between text-left min-w-0",
         "bg-gradient-to-br",
         gradient,
       )}
     >
-      <div className="flex justify-between items-start">
-        <div className="space-y-1">
-          <p className="text-[13px] font-semibold text-white/80 uppercase tracking-widest">
+      <div className="flex justify-between items-start gap-2 min-w-0">
+        <div className="space-y-1 min-w-0">
+          <p className="text-[11px] sm:text-[13px] font-semibold text-white/80 uppercase tracking-widest truncate">
             {title}
           </p>
-          <div className="flex items-center gap-2">
-            <h3 className="text-2xl font-extrabold text-white tracking-tight">
+          <div className="flex items-center gap-2 min-w-0">
+            <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">
               {value}
             </h3>
           </div>
@@ -1095,10 +788,10 @@ function SummaryCard({
           <Icon className="w-5 h-5 text-white" />
         </div>
       </div>
-      <div className="flex items-center justify-between mt-4">
-        <p className="text-[13px] text-white/60 font-medium">{subtitle}</p>
+      <div className="flex items-center justify-between mt-4 gap-2 min-w-0">
+        <p className="text-[11px] sm:text-[13px] text-white/60 font-medium truncate">{subtitle}</p>
         {badgeText && (
-          <span className="px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-black text-white tracking-widest backdrop-blur-sm">
+          <span className="px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-black text-white tracking-widest backdrop-blur-sm shrink-0">
             {badgeText}
           </span>
         )}

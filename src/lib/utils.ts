@@ -30,18 +30,12 @@ export function getSellThroughRate(product: { quantity?: number; unitsSold?: num
   return (sold / received) * 100;
 }
 
-export function getProductMovementSpeed(product: { quantity?: number; unitsSold?: number; unitsReceived?: number; movement?: string; averageDailySales?: number }): 'fast' | 'moderate' | 'slow' | 'obsolete' {
-  if (product.movement === 'obsolete') return 'obsolete';
-  
-  // If Average Daily Sales (ADS) is available, prioritize classifying based on ADS sales rate
-  if (typeof product.averageDailySales === 'number') {
-    if (product.averageDailySales >= 1.0) return 'fast';
-    if (product.averageDailySales >= 0.3) return 'moderate';
-    return 'slow';
+import { calculateSKUAgingDetails } from './inventoryAgingService';
+
+export function getProductMovementSpeed(product: any, movements: any[] = []): 'fast' | 'moderate' | 'slow' | 'obsolete' {
+  const details = calculateSKUAgingDetails(product, movements);
+  if (details.movementClass === 'out_of_stock') {
+    return 'obsolete'; // Fallback for backward compatibility where 'out_of_stock' is handled separately
   }
-  
-  const str = getSellThroughRate(product);
-  if (str >= 70) return 'fast';
-  if (str >= 40) return 'moderate';
-  return 'slow';
+  return details.movementClass;
 }

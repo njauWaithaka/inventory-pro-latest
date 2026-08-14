@@ -626,45 +626,6 @@ export function Demand() {
         </div>
       </div>
 
-      {/* Demand Sales & Profitability Hero Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-5 bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-[1.5rem] shadow-md relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">Total Sales from Demand</span>
-            <span className="px-2 py-0.5 bg-white/20 text-white text-[9px] font-extrabold rounded-full uppercase">REVENUE</span>
-          </div>
-          <p className="text-3xl font-black mt-2 tracking-tight">
-            {currency}{Math.round(metrics.totalDemandSales).toLocaleString()}
-          </p>
-          <p className="text-xs text-blue-100 font-medium mt-1">Total fulfilled sales revenue for selected period</p>
-        </div>
-
-        <div className="p-5 bg-gradient-to-br from-emerald-600 to-teal-800 text-white rounded-[1.5rem] shadow-md relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-200">Demand Gross Profit</span>
-            <span className="px-2.5 py-0.5 bg-white/20 text-white text-[9px] font-extrabold rounded-full uppercase">
-              {metrics.demandGrossMarginPct.toFixed(1)}% MARGIN
-            </span>
-          </div>
-          <p className="text-3xl font-black mt-2 tracking-tight">
-            {currency}{Math.round(metrics.demandGrossProfit).toLocaleString()}
-          </p>
-          <p className="text-xs text-emerald-100 font-medium mt-1">Gross revenue minus cost of goods sold (COGS)</p>
-        </div>
-
-        <div className="p-5 bg-gradient-to-br from-indigo-700 to-slate-900 text-white rounded-[1.5rem] shadow-md relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-200">Demand Net Profit</span>
-            <span className="px-2.5 py-0.5 bg-white/20 text-white text-[9px] font-extrabold rounded-full uppercase">
-              {metrics.demandNetMarginPct.toFixed(1)}% MARGIN
-            </span>
-          </div>
-          <p className="text-3xl font-black mt-2 tracking-tight">
-            {currency}{Math.round(metrics.demandNetProfit).toLocaleString()}
-          </p>
-          <p className="text-xs text-indigo-100 font-medium mt-1">Gross profit minus operating overhead costs</p>
-        </div>
-      </div>
 
       {/* 1. 12 Highly Styled Top KPI Cards with clear Color Coding */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
