@@ -407,44 +407,84 @@ export function Analytics() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
         {/* Line Chart: Turnover Trend */}
-        <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left">
-          <div className="mb-0">
-            <h3 className="text-lg font-extrabold text-slate-900">Stock Turnover Trend</h3>
-            <p className="text-xs font-medium text-slate-400 mt-0.5">Monthly turnover ratio (Line Chart)</p>
+        <div className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left flex flex-col justify-between min-w-0 w-full">
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <div>
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-900">Stock Turnover Trend</h3>
+                <p className="text-xs font-medium text-slate-400 mt-0.5">Monthly turnover ratio (Line Chart)</p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-100 rounded-lg text-blue-700 text-xs font-bold w-fit shrink-0">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                {overallTurnover.toFixed(2)}x Current Rate
+              </div>
+            </div>
+            <div className="h-[240px] sm:h-[280px] md:h-[300px] w-full min-h-[200px] min-w-0 mt-4">
+              <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={200}>
+                <LineChart data={turnoverRatioData} margin={{ top: 10, right: 12, left: -14, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} 
+                    dy={10} 
+                    interval={0}
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    width={36}
+                    tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
+                    tickFormatter={(val) => `${val}x`}
+                    domain={[0, 'auto']}
+                  />
+                  <Tooltip 
+                    formatter={(val: any) => [`${Number(val).toFixed(2)}x`, "Turnover Rate"]}
+                    contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                    labelStyle={{ fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}
+                  />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="turnover" 
+                    name="Turnover Rate" 
+                    stroke="#3b82f6" 
+                    strokeWidth={3} 
+                    dot={{ r: 4, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} 
+                    activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} 
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-[320px] w-full mt-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={turnoverRatioData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} 
-                  dy={10} 
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
-                  tickFormatter={(val) => `${val}x`}
-                  domain={[0, 'auto']}
-                />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
-                  labelStyle={{ fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}
-                />
-                <Legend iconType="circle" />
-                <Line type="monotone" dataKey="turnover" name="Turnover Rate" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, fill: '#3b82f6' }} activeDot={{ r: 6 }} />
-              </LineChart>
-            </ResponsiveContainer>
+
+          <div className="grid grid-cols-3 gap-2 pt-3 mt-4 border-t border-slate-100 text-center">
+            <div className="text-left">
+              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-tight">6-Mo Avg</span>
+              <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                {(turnoverRatioData.reduce((s, i) => s + i.turnover, 0) / Math.max(1, turnoverRatioData.length)).toFixed(2)}x
+              </span>
+            </div>
+            <div>
+              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-tight">Peak Month</span>
+              <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                {Math.max(...turnoverRatioData.map(i => i.turnover), 0).toFixed(2)}x
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-tight">Status</span>
+              <span className="text-xs sm:text-sm font-extrabold text-emerald-600">
+                Active
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Pie Chart: Cash Tied by Category */}
-        <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col text-left">
+        <div className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col text-left min-w-0 w-full">
           <div className="mb-6">
             <h3 className="text-xl font-extrabold text-slate-900">Category Distribution</h3>
             <p className="text-xs font-medium text-slate-400 mt-0.5">Inventory value share (Pie Chart)</p>

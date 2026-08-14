@@ -689,19 +689,25 @@ export function Dashboard({
           </div>
 
           {/* Stock Turnover Trend */}
-          <div className="bg-white border border-[#DDE5F0] rounded-xl shadow-sm p-5 md:p-6 flex flex-col min-w-0">
-            <div className="mb-6 text-left">
-              <h2 className="text-lg font-bold text-[#06132B]">
-                Stock Turnover Trend
-              </h2>
-              <p className="text-sm text-[#526789]">
-                Monthly inventory turnover ratio
-              </p>
+          <div className="bg-white border border-[#DDE5F0] rounded-xl shadow-sm p-4 sm:p-5 md:p-6 flex flex-col justify-between min-w-0 w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 text-left">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-[#06132B]">
+                  Stock Turnover Trend
+                </h2>
+                <p className="text-xs sm:text-sm text-[#526789]">
+                  Monthly inventory turnover ratio
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-50 border border-teal-200/60 rounded-lg text-[#23AFA5] text-xs font-bold w-fit shrink-0">
+                <span className="w-2 h-2 rounded-full bg-[#23AFA5] animate-pulse" />
+                {turnoverRatioData.length > 0 ? `${turnoverRatioData[turnoverRatioData.length - 1].turnover.toFixed(2)}x Current` : 'Active'}
+              </div>
             </div>
 
-            <div className="flex-1 w-full h-[220px] md:h-[240px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={turnoverRatioData}>
+            <div className="w-full h-[210px] sm:h-[230px] md:h-[240px] min-h-[190px] min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={190}>
+                <AreaChart data={turnoverRatioData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                   <defs>
                     <linearGradient
                       id="colorTurnover"
@@ -710,8 +716,8 @@ export function Dashboard({
                       x2="0"
                       y2="1"
                     >
-                      <stop offset="5%" stopColor="#23AFA5" stopOpacity={0.1} />
-                      <stop offset="95%" stopColor="#23AFA5" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#23AFA5" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#23AFA5" stopOpacity={0.01} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid
@@ -723,15 +729,19 @@ export function Dashboard({
                     dataKey="name"
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 700, fill: "#94a3b8" }}
+                    tick={{ fontSize: 11, fontWeight: 700, fill: "#94a3b8" }}
                     dy={10}
+                    interval={0}
                   />
-                  <YAxis hide={true} />
+                  <YAxis hide={true} domain={[0, 'auto']} />
                   <Tooltip
+                    formatter={(val: any) => [`${Number(val).toFixed(2)}x`, "Turnover Rate"]}
                     contentStyle={{
                       borderRadius: "12px",
-                      border: "none",
+                      border: "1px solid #e2e8f0",
                       boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                      fontWeight: 700,
+                      fontSize: "12px"
                     }}
                   />
                   <Area
@@ -741,9 +751,32 @@ export function Dashboard({
                     strokeWidth={3}
                     fillOpacity={1}
                     fill="url(#colorTurnover)"
+                    dot={{ r: 3, fill: '#23AFA5', strokeWidth: 1, stroke: '#fff' }}
+                    activeDot={{ r: 5, fill: '#23AFA5', stroke: '#fff', strokeWidth: 2 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t border-slate-100 text-center">
+              <div className="text-left">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-tight">6-Mo Avg</span>
+                <span className="text-xs sm:text-sm font-extrabold text-[#06132B]">
+                  {(turnoverRatioData.reduce((s, i) => s + i.turnover, 0) / Math.max(1, turnoverRatioData.length)).toFixed(2)}x
+                </span>
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-tight">Peak Month</span>
+                <span className="text-xs sm:text-sm font-extrabold text-[#06132B]">
+                  {Math.max(...turnoverRatioData.map(i => i.turnover), 0).toFixed(2)}x
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-tight">Velocity</span>
+                <span className="text-xs sm:text-sm font-extrabold text-emerald-600">
+                  Healthy
+                </span>
+              </div>
             </div>
           </div>
         </div>
