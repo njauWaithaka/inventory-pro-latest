@@ -14,6 +14,15 @@ import {
   TimePeriod 
 } from '../../lib/stockTurnoverService';
 import { 
+  calculateComprehensiveAnalytics 
+} from '../../lib/comprehensiveAnalyticsService';
+import { BusinessOwnerKPISection } from './analytics/BusinessOwnerKPISection';
+import { ActionableInsightsSection } from './analytics/ActionableInsightsSection';
+import { SalesPerformanceTrend } from './analytics/SalesPerformanceTrend';
+import { TopProductsAnalytics } from './analytics/TopProductsAnalytics';
+import { InventoryHealthOverview } from './analytics/InventoryHealthOverview';
+import { ReorderStockoutIntelligence } from './analytics/ReorderStockoutIntelligence';
+import { 
   TrendingUp, DollarSign, Package, BarChart3, Calendar, RotateCcw, FileDown, 
   Activity, MousePointer2, Clock, Ban, ChevronDown, CheckCircle2, ShieldCheck, 
   AlertTriangle, RefreshCw, Sparkles, HelpCircle, ArrowRight, UserCheck, Inbox,
@@ -108,6 +117,18 @@ export function Analytics() {
   const dateRange = useMemo(() => {
     return getDateRangeForPeriod(selectedPeriod, customRange);
   }, [selectedPeriod, customRange]);
+
+  // Comprehensive Analytics Calculation Engine (Single Source of Truth)
+  const comprehensiveAnalytics = useMemo(() => {
+    return calculateComprehensiveAnalytics(
+      products,
+      invoices,
+      stockMovements,
+      selectedPeriod,
+      customRange,
+      currency
+    );
+  }, [products, invoices, stockMovements, selectedPeriod, customRange, currency]);
 
   // Overall statistics memo
   const overallStats = useMemo(() => {
@@ -277,12 +298,16 @@ export function Analytics() {
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
-      {/* Header */}
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-20">
+      {/* Header & Date Filtering Toolbar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
         <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Analytics</h2>
-          <p className="text-slate-500 text-[11px] sm:text-sm font-medium mt-1">Deep insights into inventory performance</p>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+            Inventory & Business Intelligence
+          </h2>
+          <p className="text-slate-500 text-[11px] sm:text-sm font-medium mt-1">
+            Real-time analytics, stock coverage, margin performance, and demand forecasting
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {/* Period selector pills */}
@@ -290,11 +315,12 @@ export function Analytics() {
             {(['Today', 'This Week', 'This Month', 'This Year', 'Custom'] as TimePeriod[]).map((period) => (
               <button
                 key={period}
+                type="button"
                 onClick={() => setSelectedPeriod(period)}
                 className={cn(
                   "px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-all",
                   selectedPeriod === period
-                    ? "bg-white text-slate-950 shadow-sm"
+                    ? "bg-white text-slate-950 shadow-xs"
                     : "text-slate-500 hover:text-slate-900"
                 )}
               >
@@ -305,7 +331,7 @@ export function Analytics() {
 
           {/* Custom Date Picker Fields */}
           {selectedPeriod === 'Custom' && (
-            <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-xs animate-in fade-in slide-in-from-top-1 duration-150">
               <input
                 type="date"
                 value={customStartDate}
@@ -323,92 +349,48 @@ export function Analytics() {
           )}
 
           <button 
+            type="button"
             onClick={() => {
-              // Trigger simple refresh by reloading window or resetting loaded states
               setProductsLoaded(false);
               setMovementsLoaded(false);
+              setInvoicesLoaded(false);
             }}
-            className="flex items-center gap-2 px-3 sm:px-4 h-9 sm:h-10 border border-slate-200 rounded-xl bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-[10px] sm:text-xs shrink-0"
+            className="flex items-center gap-2 px-3 sm:px-4 h-9 sm:h-10 border border-slate-200 rounded-xl bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-[10px] sm:text-xs shrink-0 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" />
             <span className="truncate">Refresh</span>
           </button>
-          <button className="flex items-center gap-2 bg-[#0f172a] text-white px-3 sm:px-5 h-9 sm:h-10 rounded-xl font-bold hover:bg-slate-800 transition-all text-[10px] sm:text-xs shrink-0">
+          <button 
+            type="button"
+            className="flex items-center gap-2 bg-[#0f172a] text-white px-3 sm:px-5 h-9 sm:h-10 rounded-xl font-bold hover:bg-slate-800 transition-all text-[10px] sm:text-xs shrink-0 cursor-pointer"
+          >
             <FileDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="truncate">Export Report</span>
           </button>
         </div>
       </div>
 
-      {/* Mini Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-50 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
-            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
-          </div>
-          <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate font-mono">{overallTurnover.toFixed(2)}x</p>
-            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Turnover ({selectedPeriod})</p>
-          </div>
-        </div>
-        
-        {/* Total Inventory */}
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-slate-900 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
-            <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{formatCompactNumber(totalCapital, currency)}</p>
-            <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Total Value</p>
-          </div>
-        </div>
+      {/* 1. EXECUTIVE BUSINESS OWNER "AT A GLANCE" KPI SECTION */}
+      <BusinessOwnerKPISection 
+        analytics={comprehensiveAnalytics} 
+        currency={currency} 
+        selectedPeriod={selectedPeriod} 
+      />
 
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-500 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
-            <Package className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{totalSKUs.toLocaleString()}</p>
-            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Active SKUs</p>
-          </div>
-        </div>
+      {/* 2. DYNAMIC ACTIONABLE INSIGHTS SECTION */}
+      <ActionableInsightsSection 
+        insights={comprehensiveAnalytics.actionableInsights} 
+      />
 
-        {/* Total Sales Card */}
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3 text-left">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-500 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
-            <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{currency}{Math.round(salesMetrics.totalSales).toLocaleString()}</p>
-            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Total Sales</p>
-          </div>
-        </div>
-
-        {/* Gross Profit Card */}
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3 text-left">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-600 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
-            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{currency}{Math.round(salesMetrics.grossProfit).toLocaleString()}</p>
-            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Gross Profit</p>
-          </div>
-        </div>
-
-        {/* Net Profit Card */}
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 sm:gap-3 text-left">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-600 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0">
-            <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="text-left min-w-0">
-            <p className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate">{currency}{Math.round(salesMetrics.netProfit).toLocaleString()}</p>
-            <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 mt-0.5 sm:mt-1 leading-tight truncate">Net Profit</p>
-          </div>
-        </div>
-      </div>
-
+      {/* 3. SALES PERFORMANCE TRAJECTORY & STOCK TURNOVER TREND */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
-        {/* Line Chart: Turnover Trend */}
+        {/* Interactive Sales Performance Trend */}
+        <SalesPerformanceTrend 
+          analytics={comprehensiveAnalytics} 
+          currency={currency} 
+        />
+
+        {/* Preserved Line Chart: Stock Turnover Trend */}
         <div className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left flex flex-col justify-between min-w-0 w-full">
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
@@ -482,8 +464,23 @@ export function Analytics() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Pie Chart: Cash Tied by Category */}
+      {/* 4. INVENTORY HEALTH OVERVIEW & RISK BREAKDOWN */}
+      <InventoryHealthOverview 
+        analytics={comprehensiveAnalytics} 
+        currency={currency} 
+      />
+
+      {/* 5. TOP PRODUCTS (4 PERSPECTIVES) & CATEGORY DISTRIBUTION */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
+        {/* Top Products in 4 Distinct Perspectives */}
+        <TopProductsAnalytics 
+          analytics={comprehensiveAnalytics} 
+          currency={currency} 
+        />
+
+        {/* Preserved Pie Chart: Cash Tied by Category */}
         <div className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col text-left min-w-0 w-full">
           <div className="mb-6">
             <h3 className="text-xl font-extrabold text-slate-900">Category Distribution</h3>
@@ -533,7 +530,16 @@ export function Analytics() {
             </div>
           </div>
         </div>
+      </div>
 
+      {/* 6. ESTIMATED STOCKOUT HORIZON & REORDER OPPORTUNITIES ("REORDER NOW") */}
+      <ReorderStockoutIntelligence 
+        analytics={comprehensiveAnalytics} 
+        currency={currency} 
+      />
+
+      {/* 7. PRESERVED MOVEMENT & VALUE CHARTS */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
         {/* Column Chart: Movement by Item Count */}
         <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left">
           <div className="mb-6">
@@ -598,128 +604,128 @@ export function Analytics() {
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
 
-        {/* Scatter Plot: Price vs Quantity Analysis */}
-        <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left">
-          <div className="mb-6">
-            <h3 className="text-lg font-extrabold text-slate-900">Price vs Quantity (Scatter Plot)</h3>
-            <p className="text-xs font-medium text-slate-400 mt-0.5">Identifying high-value outliers and stocking efficiency</p>
-          </div>
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis 
-                  type="number" 
-                  dataKey="quantity" 
-                  name="Stock Quantity" 
-                  axisLine={false} 
-                  tickLine={false}
-                  label={{ value: 'Quantity', position: 'insideBottom', offset: -10, fontSize: 10, fontWeight: 700 }}
-                />
-                <YAxis 
-                  type="number" 
-                  dataKey="price" 
-                  name="Unit Price" 
-                  axisLine={false} 
-                  tickLine={false}
-                  tickFormatter={(val) => `${currency}${val}`}
-                  label={{ value: 'Price', angle: -90, position: 'insideLeft', fontSize: 10, fontWeight: 700 }}
-                />
-                <ZAxis type="number" dataKey="totalValue" range={[64, 400]} name="Total Value" />
-                <Tooltip 
-                  cursor={{ strokeDasharray: '3 3' }} 
-                  content={({ payload }) => {
-                    if (payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xl text-left">
-                          <p className="text-xs font-black text-slate-900 mb-2 truncate max-w-[200px]">{data.name}</p>
-                          <div className="space-y-1">
-                            <p className="text-[10px] font-bold text-slate-500">Price: <span className="text-slate-900">{currency}{data.price}</span></p>
-                            <p className="text-[10px] font-bold text-slate-500">Stock: <span className="text-slate-900">{data.quantity} units</span></p>
-                            <p className="text-[10px] font-bold text-slate-500">Value: <span className="text-blue-600">{currency}{data.totalValue.toLocaleString()}</span></p>
-                          </div>
+      {/* 8. PRESERVED SCATTER PLOT: PRICE VS QUANTITY ANALYSIS */}
+      <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left">
+        <div className="mb-6">
+          <h3 className="text-lg font-extrabold text-slate-900">Price vs Quantity (Scatter Plot)</h3>
+          <p className="text-xs font-medium text-slate-400 mt-0.5">Identifying high-value outliers and stocking efficiency</p>
+        </div>
+        <div className="h-[350px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis 
+                type="number" 
+                dataKey="quantity" 
+                name="Stock Quantity" 
+                axisLine={false} 
+                tickLine={false}
+                label={{ value: 'Quantity', position: 'insideBottom', offset: -10, fontSize: 10, fontWeight: 700 }}
+              />
+              <YAxis 
+                type="number" 
+                dataKey="price" 
+                name="Unit Price" 
+                axisLine={false} 
+                tickLine={false}
+                tickFormatter={(val) => `${currency}${val}`}
+                label={{ value: 'Price', angle: -90, position: 'insideLeft', fontSize: 10, fontWeight: 700 }}
+              />
+              <ZAxis type="number" dataKey="totalValue" range={[64, 400]} name="Total Value" />
+              <Tooltip 
+                cursor={{ strokeDasharray: '3 3' }} 
+                content={({ payload }) => {
+                  if (payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xl text-left">
+                        <p className="text-xs font-black text-slate-900 mb-2 truncate max-w-[200px]">{data.name}</p>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-slate-500">Price: <span className="text-slate-900">{currency}{data.price}</span></p>
+                          <p className="text-[10px] font-bold text-slate-500">Stock: <span className="text-slate-900">{data.quantity} units</span></p>
+                          <p className="text-[10px] font-bold text-slate-500">Value: <span className="text-blue-600">{currency}{data.totalValue.toLocaleString()}</span></p>
                         </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Scatter name="Products" data={scatterData} fill="#3b82f6" fillOpacity={0.6} />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Automatic SKU Movement Classification & Inventory Aging Dashboard */}
-        <div className="lg:col-span-2">
-          <SKUMovementDashboard 
-            products={allProducts} 
-            movements={stockMovements} 
-            currency={currency} 
-          />
-        </div>
-
-        {/* ABC Analysis Section */}
-        <div className="lg:col-span-2">
-          <ABCAnalysisSection products={allProducts} currency={currency} />
-        </div>
-
-        {/* Sell-Through Rate (STR) Performance */}
-        <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-extrabold text-slate-900">STR Performance Card</h3>
-                <p className="text-xs font-medium text-slate-400 mt-0.5">Percentage of inventory sold compared to received</p>
-              </div>
-              <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-widest border border-blue-100/30">
-                Formula Match
-              </span>
-            </div>
-
-            <div className="space-y-5">
-              {[...allProducts]
-                .map(p => ({
-                  ...p,
-                  str: getSellThroughRate(p)
-                }))
-                .sort((a, b) => b.str - a.str)
-                .slice(0, 5)
-                .map((p, idx) => (
-                  <div key={idx} className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-800 truncate max-w-[180px]">{p.name}</span>
-                      <span className="font-extrabold text-slate-950 font-mono">{p.str.toFixed(1)}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div 
-                        className={cn(
-                          "h-full rounded-full transition-all duration-500",
-                          p.str >= 70 ? "bg-emerald-500" : p.str >= 40 ? "bg-blue-500" : "bg-amber-500"
-                        )}
-                        style={{ width: `${Math.min(100, p.str)}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center text-[10px] font-bold text-slate-400">
-                      <span>Sold: {p.unitsSold || 0} units</span>
-                      <span>Received: {p.unitsReceived || (p.quantity + (p.unitsSold || 0))} units</span>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-          <div className="pt-4 mt-6 border-t border-slate-100 text-[10px] font-bold text-slate-400 leading-relaxed">
-            Standard Retail Formula: <br />
-            <span className="font-mono bg-slate-100/50 px-1.5 py-0.5 rounded text-blue-600 font-extrabold block mt-1 tracking-wide">
-              STR = (Units Sold / Units Received) × 100
-            </span>
-          </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Scatter name="Products" data={scatterData} fill="#3b82f6" fillOpacity={0.6} />
+            </ScatterChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Product-level Stock Turnover Table */}
+      {/* 9. PRESERVED SKU MOVEMENT CLASSIFICATION & AGING DASHBOARD */}
+      <div className="w-full">
+        <SKUMovementDashboard 
+          products={allProducts} 
+          movements={stockMovements} 
+          currency={currency} 
+        />
+      </div>
+
+      {/* 10. PRESERVED ABC ANALYSIS SECTION */}
+      <div className="w-full">
+        <ABCAnalysisSection products={allProducts} currency={currency} />
+      </div>
+
+      {/* 11. PRESERVED SELL-THROUGH RATE (STR) PERFORMANCE CARD */}
+      <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-extrabold text-slate-900">STR Performance Card</h3>
+              <p className="text-xs font-medium text-slate-400 mt-0.5">Percentage of inventory sold compared to received</p>
+            </div>
+            <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-widest border border-blue-100/30">
+              Formula Match
+            </span>
+          </div>
+
+          <div className="space-y-5">
+            {[...allProducts]
+              .map(p => ({
+                ...p,
+                str: getSellThroughRate(p)
+              }))
+              .sort((a, b) => b.str - a.str)
+              .slice(0, 5)
+              .map((p, idx) => (
+                <div key={idx} className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-800 truncate max-w-[180px]">{p.name}</span>
+                    <span className="font-extrabold text-slate-950 font-mono">{p.str.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className={cn(
+                        "h-full rounded-full transition-all duration-500",
+                        p.str >= 70 ? "bg-emerald-500" : p.str >= 40 ? "bg-blue-500" : "bg-amber-500"
+                      )}
+                      style={{ width: `${Math.min(100, p.str)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-bold text-slate-400">
+                    <span>Sold: {p.unitsSold || 0} units</span>
+                    <span>Received: {p.unitsReceived || (p.quantity + (p.unitsSold || 0))} units</span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+        <div className="pt-4 mt-6 border-t border-slate-100 text-[10px] font-bold text-slate-400 leading-relaxed">
+          Standard Retail Formula: <br />
+          <span className="font-mono bg-slate-100/50 px-1.5 py-0.5 rounded text-blue-600 font-extrabold block mt-1 tracking-wide">
+            STR = (Units Sold / Units Received) × 100
+          </span>
+        </div>
+      </div>
+
+      {/* 12. PRESERVED PRODUCT-LEVEL STOCK TURNOVER TABLE */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm text-left">
         <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -752,7 +758,7 @@ export function Analytics() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full sm:w-40 px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-xl outline-none focus:border-blue-500 transition-colors bg-white text-slate-700"
+              className="w-full sm:w-40 px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-xl outline-none focus:border-blue-500 transition-colors bg-white text-slate-700 cursor-pointer"
             >
               {categoriesList.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
@@ -853,3 +859,4 @@ export function Analytics() {
     </div>
   );
 }
+
