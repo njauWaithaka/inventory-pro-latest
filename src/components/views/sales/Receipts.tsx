@@ -71,9 +71,33 @@ export function Receipts() {
           <p className="text-slate-500 text-sm font-medium mt-1">Record and track all customer payments</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 h-11 border border-slate-200 rounded-lg bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-sm">
+          <button 
+            onClick={() => {
+              if (receipts.length === 0) return;
+              const csvHeaders = ["Receipt ID", "Date", "Customer", "Payment Method", "Items Count", "Subtotal", "Tax", "Total Amount"];
+              const csvRows = receipts.map(r => [
+                r.id || r.receiptId || '',
+                r.date || formatReceiptDate(r),
+                `"${(r.customerName || 'Walk-in Customer').replace(/"/g, '""')}"`,
+                r.paymentMethod || 'Cash',
+                r.items ? r.items.length : 1,
+                (r.subtotal || 0).toFixed(2),
+                (r.tax || 0).toFixed(2),
+                (r.total || 0).toFixed(2)
+              ]);
+              const csvContent = "data:text/csv;charset=utf-8," + [csvHeaders.join(','), ...csvRows.map(e => e.join(','))].join('\n');
+              const encodedUri = encodeURI(csvContent);
+              const link = document.createElement("a");
+              link.setAttribute("href", encodedUri);
+              link.setAttribute("download", `Receipts_Report_${new Date().toISOString().split('T')[0]}.csv`);
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 h-11 border border-slate-200 rounded-xl bg-white text-slate-700 font-bold hover:bg-slate-50 transition-all text-sm shadow-2xs cursor-pointer"
+          >
             <Download className="w-4 h-4" />
-            Export
+            Export CSV
           </button>
           <button className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#0f172a] text-white px-5 h-11 rounded-lg font-bold hover:bg-slate-800 transition-all text-sm shadow-sm">
             <Plus className="w-4 h-4" />
@@ -316,39 +340,43 @@ export function Receipts() {
 
                 <div 
                   id="printable-receipt-area" 
-                  className="bg-white w-full max-w-[340px] p-6 shadow-lg border border-slate-200 font-sans text-slate-900"
+                  className="bg-white w-full max-w-[360px] p-6 shadow-lg border border-slate-200 font-mono text-slate-900 rounded-xl text-xs"
                 >
                   <div className="text-center space-y-1 pb-4 border-b border-dashed border-slate-300">
-                    <h2 className="text-base font-black uppercase tracking-tight">{company?.name || 'INVENTORYPRO CO.'}</h2>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{company?.address || 'Nairobi, Kenya'}</p>
-                    <p className="text-[10px] font-medium text-slate-500">{company?.phone || '+254 700 000 000'}</p>
+                    <h2 className="text-base sm:text-lg font-black uppercase tracking-tight">{profile?.companyName || company?.name || 'INVENTORY PRO STORE'}</h2>
+                    <p className="text-[10px] font-sans font-medium text-slate-500">{company?.address || profile?.address || 'Main Branch, Retail Street'}</p>
+                    <p className="text-[10px] font-sans text-slate-500">Tel: {company?.phone || profile?.phone || '+254 700 000 000'}</p>
 
-                    <p className="text-[11px] font-black uppercase tracking-widest border border-slate-900 px-2 py-0.5 mt-2 inline-block">Sales Receipt</p>
+                    <div className="pt-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white px-2.5 py-0.5 rounded">
+                        OFFICIAL SALES RECEIPT
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="space-y-1 py-3 text-[10px] border-b border-dashed border-slate-300">
+                  <div className="space-y-1 py-3 text-[11px] border-b border-dashed border-slate-300">
                     <div className="flex justify-between">
-                      <span className="font-semibold text-slate-500">RECEIPT NO:</span>
-                      <span className="font-bold text-slate-800">{selectedReceipt.id?.slice(-8) || selectedReceipt.id}</span>
+                      <span className="text-slate-500">Receipt No:</span>
+                      <span className="font-bold text-slate-900 font-mono">{selectedReceipt.id}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="font-semibold text-slate-500">DATE & TIME:</span>
-                      <span className="font-bold text-slate-800">{formatReceiptDate(selectedReceipt)}</span>
+                      <span className="text-slate-500">Date & Time:</span>
+                      <span className="font-medium text-slate-800">{formatReceiptDate(selectedReceipt)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="font-semibold text-slate-500">CUSTOMER:</span>
-                      <span className="font-bold text-slate-800">{selectedReceipt.customerName || 'Walk-in Customer'}</span>
+                      <span className="text-slate-500">Customer:</span>
+                      <span className="font-bold text-slate-900">{selectedReceipt.customerName || 'Walk-in Customer'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="font-semibold text-slate-500">PAYMENT METHOD:</span>
-                      <span className="font-bold text-slate-800 uppercase">{selectedReceipt.paymentMethod || 'CASH'}</span>
+                      <span className="text-slate-500">Payment Method:</span>
+                      <span className="font-bold uppercase text-emerald-700">{selectedReceipt.paymentMethod || 'CASH'}</span>
                     </div>
                   </div>
 
                   <div className="py-3">
                     <table className="w-full text-left text-[11px]">
                       <thead>
-                        <tr className="border-b border-dashed border-slate-300 text-slate-500 font-bold">
+                        <tr className="border-b border-dashed border-slate-300 text-slate-500 font-bold text-[10px]">
                           <th className="pb-1 uppercase">Item</th>
                           <th className="pb-1 text-center uppercase">Qty</th>
                           <th className="pb-1 text-right uppercase">Price</th>
@@ -358,54 +386,54 @@ export function Receipts() {
                       <tbody className="divide-y divide-dashed divide-slate-100">
                         {selectedReceipt.items && selectedReceipt.items.length > 0 ? (
                           selectedReceipt.items.map((item: any, i: number) => (
-                            <tr key={i} className="text-slate-800">
-                              <td className="py-2 pr-2 font-semibold">
+                            <tr key={i} className="text-slate-900">
+                              <td className="py-1.5 pr-1 font-semibold break-words whitespace-normal leading-snug">
                                 {item.name}
-                                {item.sku && <span className="block text-[8px] text-slate-400 font-mono">SKU: {item.sku}</span>}
+                                {item.sku && <span className="block text-[9px] text-slate-400 font-mono">SKU: {item.sku}</span>}
                               </td>
-                              <td className="py-2 text-center font-bold">{item.quantity}</td>
-                              <td className="py-2 text-right font-medium">{currency}{(item.price || 0).toLocaleString()}</td>
-                              <td className="py-2 text-right font-bold">{currency}{((item.price || 0) * (item.quantity || 1)).toLocaleString()}</td>
+                              <td className="py-1.5 text-center font-bold">{item.quantity}</td>
+                              <td className="py-1.5 text-right font-medium font-mono">{currency}{(item.price || 0).toLocaleString()}</td>
+                              <td className="py-1.5 text-right font-black font-mono">{currency}{((item.price || 0) * (item.quantity || 1)).toLocaleString()}</td>
                             </tr>
                           ))
                         ) : (
-                          <tr className="text-slate-800">
-                            <td className="py-2 pr-2 font-semibold">
+                          <tr className="text-slate-900">
+                            <td className="py-1.5 pr-1 font-semibold break-words">
                               Standard Payment Receipt
                             </td>
-                            <td className="py-2 text-center font-bold">1</td>
-                            <td className="py-2 text-right font-medium">{currency}{(selectedReceipt.total || 0).toLocaleString()}</td>
-                            <td className="py-2 text-right font-bold">{currency}{(selectedReceipt.total || 0).toLocaleString()}</td>
+                            <td className="py-1.5 text-center font-bold">1</td>
+                            <td className="py-1.5 text-right font-mono">{currency}{(selectedReceipt.total || 0).toLocaleString()}</td>
+                            <td className="py-1.5 text-right font-black font-mono">{currency}{(selectedReceipt.total || 0).toLocaleString()}</td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
 
-                  <div className="py-3 space-y-1.5 border-t border-dashed border-slate-300">
+                  <div className="py-3 space-y-1.5 border-t border-dashed border-slate-300 text-[11px]">
                     <div className="flex justify-between text-slate-600">
-                      <span className="font-semibold">Subtotal:</span>
-                      <span className="font-bold">
+                      <span>Subtotal (Excl. VAT):</span>
+                      <span className="font-bold font-mono">
                         {currency}
                         {(selectedReceipt.subtotal !== undefined ? selectedReceipt.subtotal : (selectedReceipt.total || 0) / 1.16).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div className="flex justify-between text-slate-600">
-                      <span className="font-semibold">VAT (16%):</span>
-                      <span className="font-bold">
+                      <span>VAT (16% Included):</span>
+                      <span className="font-bold font-mono">
                         {currency}
                         {(selectedReceipt.tax !== undefined ? selectedReceipt.tax : (selectedReceipt.total || 0) * 0.16 / 1.16).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </span>
                     </div>
-                    <div className="flex justify-between text-base font-black text-slate-900 pt-1 border-t border-slate-200">
+                    <div className="flex justify-between text-sm sm:text-base font-black text-slate-900 pt-1.5 border-t border-slate-200">
                       <span>TOTAL PAID:</span>
-                      <span>{currency}{(selectedReceipt.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span className="text-emerald-700 font-mono">{currency}{(selectedReceipt.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                   </div>
 
-                  <div className="pt-6 pb-2 text-center space-y-1.5 border-t border-dashed border-slate-300 mt-4">
-                    <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Thank you for your business!</p>
-                    <p className="text-[8px] text-slate-400 font-medium">For inquiries call: {company?.phone || '+254 700 000 000'}</p>
+                  <div className="pt-4 pb-2 text-center space-y-1 border-t border-dashed border-slate-300 mt-2">
+                    <p className="text-[10px] text-slate-900 font-bold uppercase tracking-wider">Thank you for your business!</p>
+                    <p className="text-[9px] text-slate-500">Goods once sold are not returnable without valid receipt.</p>
                   </div>
                 </div>
               </div>

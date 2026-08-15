@@ -208,6 +208,35 @@ export interface MROIssue {
   notes?: string;
 }
 
+export type ReservationStatus = 'ACTIVE' | 'FULFILLED' | 'RELEASED' | 'EXPIRED';
+
+export interface StockReservation {
+  id: string;
+  reservationNumber: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  reservedFor: string;
+  customerId?: string;
+  contactInfo?: string;
+  reason?: string;
+  status: ReservationStatus;
+  reservedDate: string;
+  expiryDate?: string;
+  unitPrice?: number;
+  totalValue?: number;
+  notes?: string;
+  location?: string;
+  createdBy: string;
+  createdByName?: string;
+  userEmail?: string;
+  createdAt: string;
+  updatedAt: string;
+  fulfilledAt?: string;
+  releasedAt?: string;
+}
+
 // -------------------------------------------------------------
 // CENTRAL CALCULATION ENGINE INTERFACES
 // -------------------------------------------------------------
@@ -342,11 +371,119 @@ export interface CompanyInventoryIntelligence {
   productsIntelligence: ProductIntelligence[];
 }
 
+// -------------------------------------------------------------
+// EXPENSES & FINANCIAL MANAGEMENT INTERFACES
+// -------------------------------------------------------------
+
+export type ExpensePaymentMethod = 'Cash' | 'Bank Transfer' | 'M-Pesa' | 'Credit Card' | 'Petty Cash' | 'Cheque';
+export type ExpenseDepartment = 'Operations' | 'Sales & Marketing' | 'Administration' | 'Logistics' | 'IT & Software' | 'Finance & Legal' | 'General';
+export type ExpenseStatus = 'PAID' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYABLE' | 'CANCELLED';
+
+export interface Expense {
+  id: string;
+  expenseNumber: string;
+  title: string;
+  categoryId: string;
+  categoryName: string;
+  amount: number;
+  taxAmount?: number;
+  taxDeductible?: boolean;
+  vendorId?: string;
+  vendorName?: string;
+  date: string;
+  dueDate?: string;
+  paymentMethod: ExpensePaymentMethod;
+  department: ExpenseDepartment;
+  status: ExpenseStatus;
+  reference?: string;
+  notes?: string;
+  receiptUrl?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  paidAt?: string;
+  paidAmount?: number;
+  isRecurring?: boolean;
+  recurringScheduleId?: string;
+  pettyCashVoucherId?: string;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  color: string;
+  icon?: string;
+  isTaxDeductible: boolean;
+  monthlyBudgetLimit?: number;
+  createdAt: string;
+}
+
+export interface ExpenseBudget {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  period: string; // e.g. "Monthly" or "2026-03"
+  allocatedAmount: number;
+  alertThresholdPct: number;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface RecurringExpense {
+  id: string;
+  title: string;
+  categoryId: string;
+  categoryName: string;
+  amount: number;
+  vendorName?: string;
+  frequency: 'Weekly' | 'Bi-Weekly' | 'Monthly' | 'Quarterly' | 'Yearly';
+  startDate: string;
+  nextDueDate: string;
+  lastLoggedDate?: string;
+  autoLog: boolean;
+  status: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+  paymentMethod: ExpensePaymentMethod;
+  department: ExpenseDepartment;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface PettyCashTransaction {
+  id: string;
+  voucherNumber: string;
+  type: 'DISBURSEMENT' | 'TOP_UP' | 'RECONCILIATION';
+  amount: number;
+  balanceAfter: number;
+  recipient?: string;
+  purpose: string;
+  categoryId?: string;
+  categoryName?: string;
+  receiptNumber?: string;
+  authorizedBy: string;
+  date: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface PettyCashFloat {
+  currentBalance: number;
+  targetFloat: number;
+  minimumThreshold: number;
+  lastReplenished: string;
+}
+
 export type ViewType = 
-  | 'pos' | 'dashboard' | 'inventory' | 'demand' | 'categories' | 'analytics' | 'settings' 
+  | 'pos' | 'dashboard' | 'inventory' | 'demand' | 'categories' | 'analytics' | 'sell_through' | 'settings' 
   | 'invoices' | 'receipts' | 'delivery_notes' | 'credit_notes' | 'quotations' | 'proforma'
   | 'warehouses' | 'supplier' | 'reports' | 'warranties' | 'alerts' | 'expiry_tracking' | 'profit_tracking'
   | 'purchase_orders' | 'grn' | 'mro_issues' | 'procurement_hub'
+  | 'expenses' | 'expense_dashboard' | 'record_expense' | 'expense_transactions' | 'pending_expenses' | 'payables' | 'expense_payables' | 'recurring_expenses' | 'petty_cash' | 'expense_budgets' | 'expense_reports' | 'expense_analytics' | 'expense_categories'
   | 'bom' | 'production_orders' | 'production_planning' | 'mrp' | 'material_requisitions' | 'material_issue' | 'wip' | 'production_output' | 'quality_control' | 'cost_analysis' | 'production_analytics'
   | 'customers' | 'suppliers'
   | 'help' | 'inventory_pro_chat';
+

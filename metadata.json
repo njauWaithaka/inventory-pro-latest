@@ -1,6 +1,6 @@
 {
   "name": "Invenio",
-  "description": "A sophisticated, dark-themed inventory management system focusing on archival asset control and strategic movement analytics.",
+  "description": "An intelligent inventory, procurement, and expenses management system featuring smart business insights, turnover analytics, real-time inventory control, light-mode POS, operational expenditure tracking, budgets, and financial intelligence.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

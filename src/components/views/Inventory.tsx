@@ -50,9 +50,19 @@ import {
   ArrowUpRight,
   ShoppingCart,
   QrCode,
-  Camera
+  Camera,
+  Bookmark,
+  Sparkles,
+  Award,
+  Flame,
 } from "lucide-react";
 import { ScannerModal } from "../ScannerModal";
+import { StockReservation } from "../../types";
+import { ReservationModal } from "./inventory/ReservationModal";
+import {
+  calculateGoldenProducts,
+  calculateStockMovementInsights,
+} from "../../lib/businessInsightsService";
 
 const BRANCHES = [
   { id: "main-wh", name: "Main Warehouse", location: "Building A, Industrial Zone" },
@@ -121,6 +131,36 @@ export function Inventory() {
   const [selectedProductDetail, setSelectedProductDetail] = useState<Product | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrdersLoading, setPurchaseOrdersLoading] = useState(true);
+  const [reservations, setReservations] = useState<StockReservation[]>([]);
+  const [reservationsLoading, setReservationsLoading] = useState(true);
+  const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
+  const [reservationTargetProduct, setReservationTargetProduct] = useState<Product | null>(null);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+
+    const path = `companies/${profile.companyId}/reservations`;
+    const q = collection(db, path);
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const docs = snapshot.docs.map((doc) => ({
+          ...doc.data(),
+          id: doc.id,
+        })) as StockReservation[];
+        docs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        setReservations(docs);
+        setReservationsLoading(false);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, path);
+        setReservationsLoading(false);
+      },
+    );
+
+    return unsubscribe;
+  }, [profile?.companyId]);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -235,7 +275,7 @@ export function Inventory() {
   }, [profile?.companyId]);
 
   const [expiryFilter, setExpiryFilter] = useState<
-    "all" | "expired" | "soon" | "healthy"
+    "all" | "golden" | "expired" | "soon" | "healthy"
   >("all");
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
@@ -827,6 +867,20 @@ export function Inventory() {
     });
   };
 
+  const allProducts = [...products];
+
+  const goldenProductsData = React.useMemo(() => {
+    return calculateGoldenProducts(products, []);
+  }, [products]);
+
+  const stockVelocityInsights = React.useMemo(() => {
+    return calculateStockMovementInsights(products, movements);
+  }, [products, movements]);
+
+  const goldenProductIds = React.useMemo(() => {
+    return new Set(goldenProductsData.goldenProducts.map(p => p.id));
+  }, [goldenProductsData]);
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -834,8 +888,6 @@ export function Inventory() {
       </div>
     );
   }
-
-  const allProducts = [...products];
 
   const todayTime = new Date().setHours(0, 0, 0, 0);
   const expiredCount = allProducts.filter((p) => {
@@ -866,6 +918,11 @@ export function Inventory() {
       (p.batchNumber &&
         p.batchNumber.toLowerCase().includes(searchTerm.toLowerCase()));
     if (!matchesSearch) return false;
+
+    // Golden products filter
+    if (expiryFilter === "golden") {
+      return goldenProductIds.has(p.id);
+    }
 
     // Expiry status matching
     if (expiryFilter === "all") return true;
@@ -916,6 +973,22 @@ export function Inventory() {
           >
             <QrCode className="w-4 h-4 text-white" />
             <span>Scan Barcode / QR</span>
+          </button>
+          <button
+            onClick={() => {
+              setReservationTargetProduct(null);
+              setIsReservationModalOpen(true);
+            }}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 h-11 border border-indigo-200 rounded-lg bg-indigo-50/80 text-indigo-700 font-bold hover:bg-indigo-100 transition-all text-xs relative group shadow-xs"
+            title="Reserve products for customer orders & B2B holds"
+          >
+            <Bookmark className="w-4 h-4 text-indigo-600" />
+            <span>Reservations</span>
+            {reservations.filter(r => r.status === 'ACTIVE').length > 0 && (
+              <span className="bg-indigo-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none">
+                {reservations.filter(r => r.status === 'ACTIVE').length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setIsAdjustingStock(true)}
@@ -1619,6 +1692,18 @@ export function Inventory() {
                 >
                   <ArrowRightLeft className="w-3.5 h-3.5" />
                   Transfer Stock
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReservationTargetProduct(selectedProductDetail);
+                    setIsReservationModalOpen(true);
+                    setSelectedProductDetail(null);
+                  }}
+                  className="flex-1 min-w-[125px] h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm shadow-indigo-600/20"
+                >
+                  <Bookmark className="w-3.5 h-3.5" />
+                  Reserve Stock
                 </button>
                 <button
                   type="button"
@@ -2525,6 +2610,52 @@ export function Inventory() {
         ))}
       </div>
 
+      {/* Smart Business Intelligence: Golden Products & Stock Velocity Highlight */}
+      <div className="bg-gradient-to-br from-amber-50 via-white to-orange-50/40 border border-amber-200/80 rounded-2xl p-4 sm:p-5 shadow-xs text-left">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-amber-500/20 font-black">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500 text-white">
+                  Golden Products AI Intelligence
+                </span>
+                <span className="text-xs font-bold text-amber-900">
+                  {goldenProductsData.goldenProducts.length > 0
+                    ? `Top ${goldenProductsData.goldenProducts.length} High-Yield SKU${goldenProductsData.goldenProducts.length > 1 ? "s" : ""}`
+                    : "Product Catalog Analysis"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-700 font-medium mt-1 leading-relaxed">
+                {goldenProductsData.goldenProducts.length > 0 ? (
+                  <>
+                    <strong className="text-amber-950 font-extrabold">{goldenProductsData.goldenProducts.slice(0, 3).map(p => p.name).join(", ")}</strong> are performing exceptionally well with high margin return & consistent sales momentum. Protect buffer stock on these items.
+                  </>
+                ) : (
+                  "Identify high margin and fast turnover products to prioritize purchase orders and prevent stockouts."
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-start md:self-center">
+            <button
+              onClick={() => setExpiryFilter(expiryFilter === "golden" ? "all" : "golden")}
+              className={cn(
+                "px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs border",
+                expiryFilter === "golden"
+                  ? "bg-amber-600 text-white border-amber-600"
+                  : "bg-white text-amber-900 border-amber-200 hover:bg-amber-100/50"
+              )}
+            >
+              <Award className="w-3.5 h-3.5 text-amber-600" />
+              <span>{expiryFilter === "golden" ? "Showing Golden Only" : "Filter Golden Products"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Filters Hub with Expiry Track Tabs */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col gap-4 shadow-sm">
         <div className="flex flex-col md:flex-row gap-3">
@@ -2569,6 +2700,14 @@ export function Inventory() {
                 activeColor: "bg-slate-900 text-white border-slate-900",
                 inactiveColor:
                   "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-100",
+              },
+              {
+                id: "golden",
+                label: "✨ Golden Products",
+                count: goldenProductIds.size,
+                activeColor: "bg-amber-500 text-white border-amber-500",
+                inactiveColor:
+                  "bg-amber-50/80 hover:bg-amber-100 text-amber-800 border-amber-200",
               },
               {
                 id: "expired",
@@ -2629,7 +2768,7 @@ export function Inventory() {
       </div>
 
       {/* View Switcher: Active Stock vs. Transfer & Movement Journal */}
-      <div className="flex border-b border-slate-200 mb-6 bg-slate-50/50 p-1.5 rounded-xl border">
+      <div className="flex border-b border-slate-200 mb-6 bg-slate-50/50 p-1.5 rounded-xl border gap-1">
         <button
           onClick={() => setActiveInventoryTab("stock")}
           className={cn(
@@ -2640,6 +2779,21 @@ export function Inventory() {
           )}
         >
           📦 Active Inventory
+        </button>
+        <button
+          onClick={() => {
+            setReservationTargetProduct(null);
+            setIsReservationModalOpen(true);
+          }}
+          className="flex-1 py-2.5 text-xs font-black uppercase tracking-widest rounded-lg transition-all flex items-center justify-center gap-2 text-indigo-600 hover:bg-indigo-50/60 font-bold"
+        >
+          <Bookmark className="w-3.5 h-3.5" />
+          <span>Stock Holds & Reservations</span>
+          {reservations.filter(r => r.status === 'ACTIVE').length > 0 && (
+            <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
+              {reservations.filter(r => r.status === 'ACTIVE').length}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveInventoryTab("transfers")}
@@ -2726,9 +2880,16 @@ export function Inventory() {
                           <Package className="w-4 h-4" />
                         </div>
                         <div className="text-left min-w-0">
-                          <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-all text-xs leading-tight truncate text-left">
-                            {product.name}
-                          </p>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-all text-xs leading-tight truncate text-left">
+                              {product.name}
+                            </p>
+                            {goldenProductIds.has(product.id) && (
+                              <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                                👑 Golden
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-tight text-left flex flex-wrap gap-x-1.5 gap-y-0.5 items-center">
                             <span>Last sold: {product.lastSold}</span>
                             <span className="inline lg:hidden text-slate-500 font-mono">
@@ -2752,7 +2913,7 @@ export function Inventory() {
                       <div className="text-right">
                         <span
                           className={cn(
-                            "text-xs font-bold",
+                            "text-xs font-bold block",
                             product.quantity <= (product.reorderPoint ?? product.minStock ?? 10)
                               ? "text-rose-500 font-extrabold"
                               : "text-slate-900",
@@ -2760,6 +2921,15 @@ export function Inventory() {
                         >
                           {product.quantity.toLocaleString()}
                         </span>
+                        {product.reservedStock && product.reservedStock > 0 ? (
+                          <span 
+                            className="inline-flex items-center gap-0.5 text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded border border-indigo-100 mt-0.5" 
+                            title={`${product.reservedStock} reserved on hold, ${Math.max(0, product.quantity - product.reservedStock)} available to sell`}
+                          >
+                            <Bookmark className="w-2.5 h-2.5" />
+                            {product.reservedStock} rsvd
+                          </span>
+                        ) : null}
                       </div>
 
                       {/* Buying Price */}
@@ -2828,7 +2998,18 @@ export function Inventory() {
                       </div>
 
                       {/* Action */}
-                      <div className="flex justify-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReservationTargetProduct(product);
+                            setIsReservationModalOpen(true);
+                          }}
+                          title="Reserve stock for this product"
+                          className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg border border-transparent hover:border-indigo-100 transition-all"
+                        >
+                          <Bookmark className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -2983,6 +3164,24 @@ export function Inventory() {
         products={products}
         onScanResult={handleScanResult}
         currency={currency}
+      />
+
+      <ReservationModal
+        isOpen={isReservationModalOpen}
+        onClose={() => {
+          setIsReservationModalOpen(false);
+          setReservationTargetProduct(null);
+        }}
+        products={products}
+        reservations={reservations}
+        preSelectedProduct={reservationTargetProduct}
+        companyId={profile?.companyId || ""}
+        currency={currency}
+        currentUser={{
+          uid: user?.uid,
+          displayName: profile?.displayName || user?.displayName || "",
+          email: user?.email || ""
+        }}
       />
     </div>
   );

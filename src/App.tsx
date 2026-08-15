@@ -27,11 +27,13 @@ import { PurchaseOrders } from './components/views/procurement/PurchaseOrders';
 import { GRN } from './components/views/procurement/GRN';
 import { MROIssues } from './components/views/procurement/MROIssues';
 import { ProcurementHub } from './components/views/procurement/ProcurementHub';
+import { Expenses } from './components/views/procurement/Expenses';
 import { SalesHub } from './components/views/sales/SalesHub';
 import { Receipts } from './components/views/sales/Receipts';
 import { DeliveryNotes } from './components/views/sales/DeliveryNotes';
 import { CreditNotes } from './components/views/sales/CreditNotes';
 import { InventoryProChat, InventoryProFloatingWidget } from './components/views/InventoryProChat';
+import { SellThrough } from './components/views/SellThrough';
 import { ViewType } from './types';
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -272,6 +274,7 @@ function AppContent() {
       case 'demand': return <Demand />;
       case 'categories': return <Categories />;
       case 'analytics': return <Analytics />;
+      case 'sell_through': return <Analytics defaultTab="sell_through" />;
       case 'invoices':
       case 'quotations':
         return <SalesHub defaultView={currentView} />;
@@ -282,6 +285,20 @@ function AppContent() {
       case 'grn': return <GRN />;
       case 'mro_issues': return <MROIssues />;
       case 'procurement_hub': return <ProcurementHub />;
+      case 'expenses':
+      case 'expense_dashboard':
+      case 'expense_transactions':
+      case 'pending_expenses':
+      case 'payables':
+      case 'expense_payables':
+      case 'recurring_expenses':
+      case 'petty_cash':
+      case 'expense_budgets':
+      case 'expense_reports':
+      case 'expense_analytics':
+      case 'expense_categories':
+      case 'record_expense':
+        return <Expenses onNavigate={setCurrentView} />;
       case 'bom': return <BOM />;
       case 'production_orders': return <ProductionOrders initialTab="orders" />;
       case 'production_planning': return <ProductionOrders initialTab="planning" />;
@@ -295,7 +312,6 @@ function AppContent() {
       case 'production_analytics': return <ProductionOrders initialTab="analytics" />;
       case 'customers': return <Customers />;
       case 'suppliers': return <Suppliers />;
-      case 'warehouses': return <SettingsPlaceholder title="Warehouses Management" description="Monitor and configure your physical storage locations and zoning." icon={Warehouse} />;
       case 'supplier': return <SupplierAnalytics />;
       case 'reports': return <Reports />;
       case 'expiry_tracking': return <ExpiryTracking />;
@@ -305,17 +321,12 @@ function AppContent() {
       case 'help': return <Help />;
       case 'settings': return <SettingsView />;
       case 'inventory_pro_chat': return <InventoryProChat />;
-      default: return <Dashboard />;
+      default: return <Dashboard onNavigate={setCurrentView} />;
     }
   };
 
   return (
-    <div className={cn(
-      "min-h-screen antialiased font-sans flex flex-col transition-colors duration-200",
-      currentView === 'pos' 
-        ? "bg-slate-950 text-slate-100 selection:bg-emerald-900 selection:text-emerald-100" 
-        : "bg-brand-bg text-slate-900 selection:bg-blue-100 selection:text-blue-900"
-    )}>
+    <div className="min-h-screen antialiased font-sans flex flex-col transition-colors duration-200 bg-brand-bg text-slate-900 selection:bg-blue-100 selection:text-blue-900">
       <Sidebar 
         currentView={currentView} 
         onViewChange={setCurrentView} 

@@ -247,6 +247,33 @@
         "createdBy": { "type": "string" }
       },
       "required": ["productId", "type", "quantity", "createdAt", "createdBy"]
+    },
+    "Reservation": {
+      "title": "Reservation",
+      "description": "Stock reservation and customer hold record",
+      "type": "object",
+      "properties": {
+        "reservationNumber": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "sku": { "type": "string" },
+        "quantity": { "type": "number" },
+        "reservedFor": { "type": "string" },
+        "customerId": { "type": "string" },
+        "contactInfo": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "FULFILLED", "RELEASED", "EXPIRED"] },
+        "reservedDate": { "type": "string", "format": "date-time" },
+        "expiryDate": { "type": "string" },
+        "unitPrice": { "type": "number" },
+        "totalValue": { "type": "number" },
+        "notes": { "type": "string" },
+        "location": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reservationNumber", "productId", "quantity", "reservedFor", "status"]
     }
   },
   "firestore": {
@@ -264,6 +291,7 @@
     "/companies/{companyId}/invoices": { "schema": "Invoice", "description": "Sales invoices" },
     "/companies/{companyId}/quotations": { "schema": "Quotation", "description": "Sales quotations" },
     "/companies/{companyId}/alerts": { "schema": "InventoryAlert", "description": "Inventory alerts" },
-    "/companies/{companyId}/stockMovements": { "schema": "StockMovement", "description": "Stock history" }
+    "/companies/{companyId}/stockMovements": { "schema": "StockMovement", "description": "Stock history" },
+    "/companies/{companyId}/reservations": { "schema": "Reservation", "description": "Stock reservations and holds" }
   }
 }
