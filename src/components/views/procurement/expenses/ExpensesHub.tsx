@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   DollarSign, LayoutDashboard, Receipt, Clock, 
   CreditCard, Repeat, Wallet, BarChart2, 
-  FileText, BarChart3, Tag, Plus, Loader2 
+  FileText, BarChart3, Tag, Plus, Loader2, X, CheckCircle2 
 } from 'lucide-react';
 import { 
   Expense, ExpenseCategory, ExpenseBudget, 
@@ -13,7 +13,8 @@ import {
   subscribeToExpenses, subscribeToExpenseCategories, 
   subscribeToExpenseBudgets, subscribeToRecurringExpenses, 
   subscribeToPettyCash, subscribeToPettyCashFloat, 
-  seedDefaultExpenseCategories, seedDefaultExpenseBudgets 
+  seedDefaultExpenseCategories, seedDefaultExpenseBudgets,
+  topUpPettyCash 
 } from '../../../../lib/expenseService';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { RecordExpenseModal } from './RecordExpenseModal';
@@ -69,7 +70,41 @@ export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }
 
   // Modals
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+
+  // Top Up Petty Cash Form State
+  const [topUpAmount, setTopUpAmount] = useState('10000');
+  const [topUpSource, setTopUpSource] = useState('Bank Cash Withdrawal');
+  const [topUpVoucher, setTopUpVoucher] = useState('');
+  const [topUpNotes, setTopUpNotes] = useState('');
+  const [submittingTopUp, setSubmittingTopUp] = useState(false);
+
+  const { user, profile } = useAuth();
+  const authorizerName = profile?.name || user?.displayName || 'Finance Officer';
+
+  const handleTopUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!companyId) return;
+    const amt = parseFloat(topUpAmount);
+    if (isNaN(amt) || amt <= 0) return;
+
+    setSubmittingTopUp(true);
+    try {
+      await topUpPettyCash(companyId, amt, authorizerName, topUpNotes.trim(), {
+        source: topUpSource,
+        voucherNumber: topUpVoucher.trim() || undefined
+      });
+      setIsTopUpModalOpen(false);
+      setTopUpAmount('10000');
+      setTopUpNotes('');
+      setTopUpVoucher('');
+    } catch (err) {
+      console.error('Failed to top up petty cash:', err);
+    } finally {
+      setSubmittingTopUp(false);
+    }
+  };
 
   // Data Subscriptions
   useEffect(() => {
@@ -192,15 +227,24 @@ export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }
             })}
           </div>
 
-          <button
-            onClick={() => {
-              setEditingExpense(null);
-              setIsRecordModalOpen(true);
-            }}
-            className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-blue-600/20 whitespace-nowrap shrink-0 ml-2"
-          >
-            <Plus className="w-4 h-4" /> Record Expense
-          </button>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <button
+              onClick={() => setIsTopUpModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap shadow-2xs"
+            >
+              <Wallet className="w-4 h-4 text-emerald-700" /> Load Petty Cash
+            </button>
+
+            <button
+              onClick={() => {
+                setEditingExpense(null);
+                setIsRecordModalOpen(true);
+              }}
+              className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-blue-600/20 whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" /> Record Expense
+            </button>
+          </div>
         </div>
       </div>
 
@@ -223,7 +267,7 @@ export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }
               setEditingExpense(null);
               setIsRecordModalOpen(true);
             }}
-            onOpenPettyCashModal={() => handleTabChange('petty_cash')}
+            onOpenPettyCashModal={() => setIsTopUpModalOpen(true)}
           />
         )}
 
@@ -331,6 +375,159 @@ export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }
         currency={currency}
         initialExpense={editingExpense || undefined}
       />
+
+      {/* Load Petty Cash Top-Up Modal */}
+      <AnimatePresence>
+        {isTopUpModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden p-6 space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-slate-900">Load Petty Cash Float</h4>
+                    <p className="text-xs text-slate-400">Replenish cash drawer balance</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsTopUpModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-700 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleTopUpSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Amount to Load ({currency}) <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-slate-400 text-xs">{currency}</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      required
+                      placeholder="0.00"
+                      value={topUpAmount}
+                      onChange={(e) => setTopUpAmount(e.target.value)}
+                      className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Quick Select Pill Buttons */}
+                  <div className="flex items-center gap-1.5 mt-2 overflow-x-auto no-scrollbar">
+                    {[1000, 2500, 5000, 10000, 20000, 50000].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setTopUpAmount(amt.toString())}
+                        className={cn(
+                          "px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all whitespace-nowrap",
+                          topUpAmount === amt.toString()
+                            ? "bg-emerald-600 border-emerald-600 text-white"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        )}
+                      >
+                        +{currency} {amt.toLocaleString()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Funding Source
+                    </label>
+                    <select
+                      value={topUpSource}
+                      onChange={(e) => setTopUpSource(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white outline-none"
+                    >
+                      <option value="Bank Cash Withdrawal">Bank Cash Withdrawal</option>
+                      <option value="Main Till Transfer">Main Till Transfer</option>
+                      <option value="Director / Owner Capital">Director / Owner Capital</option>
+                      <option value="M-Pesa / Mobile Float Transfer">M-Pesa Float Transfer</option>
+                      <option value="Other">Other Source</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Voucher / Slip Ref #
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., PCV-001, Slip #481"
+                      value={topUpVoucher}
+                      onChange={(e) => setTopUpVoucher(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Notes / Description
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Weekly float replenishment from central bank account"
+                    value={topUpNotes}
+                    onChange={(e) => setTopUpNotes(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+
+                {/* Calculation preview */}
+                <div className="p-3.5 bg-emerald-50/70 border border-emerald-100 rounded-xl space-y-1 text-xs">
+                  <div className="flex items-center justify-between text-slate-600 font-medium">
+                    <span>Current Drawer Balance:</span>
+                    <span>{currency} {(pettyCashFloat.currentBalance || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-emerald-700 font-semibold">
+                    <span>+ Deposit to Load:</span>
+                    <span>+{currency} {(parseFloat(topUpAmount) || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="pt-1.5 border-t border-emerald-200/80 flex items-center justify-between font-bold text-slate-900 text-sm">
+                    <span>New Float Balance:</span>
+                    <span className="text-emerald-800">
+                      {currency} {((pettyCashFloat.currentBalance || 0) + (parseFloat(topUpAmount) || 0)).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsTopUpModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingTopUp || (parseFloat(topUpAmount) || 0) <= 0}
+                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                  >
+                    {submittingTopUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
+                    Confirm & Load Float
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

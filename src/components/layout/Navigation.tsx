@@ -47,6 +47,7 @@ import {
   CreditCard,
   Wallet,
   Tag,
+  Bookmark,
 } from "lucide-react";
 import { ViewType, Product } from "../../types";
 import { cn } from "../../lib/utils";
@@ -106,6 +107,7 @@ const menuGroups = [
       { id: "grn" as ViewType, label: "GRN", icon: Package },
       { id: "mro_issues" as ViewType, label: "MRO Issues", icon: Wrench },
       { id: "expenses" as ViewType, label: "Expenses", icon: Receipt },
+      { id: "reservations" as ViewType, label: "Reservations", icon: Bookmark },
       {
         id: "procurement_hub" as ViewType,
         label: "Procurement Hub",
@@ -131,7 +133,7 @@ const menuGroups = [
     label: "Insights",
     icon: TrendingUp,
     children: [
-      { id: "analytics" as ViewType, label: "Analytics & Sell-Through", icon: BarChart3 },
+      { id: "analytics" as ViewType, label: "Analytics", icon: BarChart3 },
       { id: "profit_tracking" as ViewType, label: "Profit Tracking", icon: DollarSign },
       { id: "reports" as ViewType, label: "Reports", icon: FileText },
       { id: "warranties" as ViewType, label: "Warranties", icon: ShieldCheck },

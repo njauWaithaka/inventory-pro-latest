@@ -27,7 +27,8 @@ import { PurchaseOrders } from './components/views/procurement/PurchaseOrders';
 import { GRN } from './components/views/procurement/GRN';
 import { MROIssues } from './components/views/procurement/MROIssues';
 import { ProcurementHub } from './components/views/procurement/ProcurementHub';
-import { Expenses } from './components/views/procurement/Expenses';
+import { Reservations } from './components/views/procurement/Reservations';
+import { ExpensesHub } from './components/views/procurement/expenses/ExpensesHub';
 import { SalesHub } from './components/views/sales/SalesHub';
 import { Receipts } from './components/views/sales/Receipts';
 import { DeliveryNotes } from './components/views/sales/DeliveryNotes';
@@ -44,6 +45,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+import { InsightsProvider } from './contexts/InsightsContext';
 import { Mail, Lock, User as UserIcon } from 'lucide-react';
 
 function AppContent() {
@@ -284,7 +286,8 @@ function AppContent() {
       case 'purchase_orders': return <PurchaseOrders />;
       case 'grn': return <GRN />;
       case 'mro_issues': return <MROIssues />;
-      case 'procurement_hub': return <ProcurementHub />;
+      case 'procurement_hub': return <ProcurementHub onNavigate={setCurrentView} />;
+      case 'reservations': return <Reservations onNavigate={setCurrentView} />;
       case 'expenses':
       case 'expense_dashboard':
       case 'expense_transactions':
@@ -298,7 +301,7 @@ function AppContent() {
       case 'expense_analytics':
       case 'expense_categories':
       case 'record_expense':
-        return <Expenses onNavigate={setCurrentView} />;
+        return <ExpensesHub currentSubView={currentView} onNavigate={setCurrentView} />;
       case 'bom': return <BOM />;
       case 'production_orders': return <ProductionOrders initialTab="orders" />;
       case 'production_planning': return <ProductionOrders initialTab="planning" />;
@@ -367,7 +370,9 @@ function AppContent() {
 export default function App() {
   return (
     <SettingsProvider>
-      <AppContent />
+      <InsightsProvider>
+        <AppContent />
+      </InsightsProvider>
     </SettingsProvider>
   );
 }

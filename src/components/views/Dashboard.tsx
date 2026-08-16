@@ -40,6 +40,7 @@ import {
   calculateGoldenProducts,
   calculateProfitInsights,
 } from "../../lib/businessInsightsService";
+import { InsightBadge } from "../common/InsightBadge";
 import { motion } from "motion/react";
 import {
   AreaChart,
@@ -497,43 +498,19 @@ export function Dashboard({
         </div>
 
         {/* Business Intelligence Observation Area */}
-        <div className="bg-gradient-to-r from-blue-900/90 via-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 border border-blue-800/60 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
-          <div className="flex items-start gap-3.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center shrink-0 text-blue-300">
-              <Zap className="w-5 h-5 fill-blue-400/30 text-blue-300" />
-            </div>
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-200 border border-blue-400/30">
-                  AI Business Insight
-                </span>
-                <span className="text-xs font-bold text-slate-300">
-                  {dashboardInsight.title}
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed max-w-4xl">
-                {dashboardInsight.summary} {dashboardInsight.recommendation && (
-                  <span className="text-blue-200 font-semibold">{dashboardInsight.recommendation}</span>
-                )}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 self-start md:self-center shrink-0">
-            <button
-              onClick={() => onNavigate?.('analytics')}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-black rounded-xl uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5"
-            >
-              <span>Explore Analytics</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        <div className="space-y-3">
+          <InsightBadge
+            elementId="dashboard_executive_kpis"
+            variant="banner"
+            className="w-full"
+          />
         </div>
 
         {/* 1. SMART ALERTS & 2. STOCK MOVEMENT (PRIORITY 1 & 2) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-w-0">
           {/* Priority 1: Smart Alerts */}
           <div className="bg-white border border-[#DDE5F0] rounded-xl shadow-sm p-6 flex flex-col min-h-[420px] text-left">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-bold text-[#06132B]">
                   Smart Alerts
@@ -547,6 +524,12 @@ export function Dashboard({
                 View All →
               </button>
             </div>
+
+            <InsightBadge
+              elementId="dashboard_stock_alert"
+              variant="banner"
+              className="mb-4"
+            />
 
             <div className="space-y-4 flex-1 flex flex-col justify-center">
               {activeAlertsList.length > 0 ? (
@@ -586,12 +569,18 @@ export function Dashboard({
 
           {/* Priority 2: Stock Movement Analysis */}
           <div className="bg-white border border-[#DDE5F0] rounded-xl shadow-sm p-6 flex flex-col min-h-[420px] text-left">
-            <div className="mb-6">
+            <div className="mb-4">
               <h2 className="text-lg font-bold text-[#06132B]">
                 Stock Movement
               </h2>
               <p className="text-sm text-[#526789]">Velocity categorization</p>
             </div>
+
+            <InsightBadge
+              elementId="dashboard_activity_overview"
+              variant="banner"
+              className="mb-4"
+            />
 
             <div className="h-3.5 w-full bg-slate-100 rounded-full flex overflow-hidden mb-6">
               <div

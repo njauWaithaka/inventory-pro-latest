@@ -63,6 +63,7 @@ import {
   calculateGoldenProducts,
   calculateStockMovementInsights,
 } from "../../lib/businessInsightsService";
+import { InsightBadge } from "../common/InsightBadge";
 
 const BRANCHES = [
   { id: "main-wh", name: "Main Warehouse", location: "Building A, Industrial Zone" },
@@ -2541,6 +2542,13 @@ export function Inventory() {
         )}
       </AnimatePresence>
 
+      {/* Valuation & Health Telemetry Badge */}
+      <InsightBadge
+        elementId="inventory_valuation_health"
+        variant="banner"
+        className="w-full"
+      />
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
@@ -2611,50 +2619,20 @@ export function Inventory() {
       </div>
 
       {/* Smart Business Intelligence: Golden Products & Stock Velocity Highlight */}
-      <div className="bg-gradient-to-br from-amber-50 via-white to-orange-50/40 border border-amber-200/80 rounded-2xl p-4 sm:p-5 shadow-xs text-left">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-amber-500/20 font-black">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500 text-white">
-                  Golden Products AI Intelligence
-                </span>
-                <span className="text-xs font-bold text-amber-900">
-                  {goldenProductsData.goldenProducts.length > 0
-                    ? `Top ${goldenProductsData.goldenProducts.length} High-Yield SKU${goldenProductsData.goldenProducts.length > 1 ? "s" : ""}`
-                    : "Product Catalog Analysis"}
-                </span>
-              </div>
-              <p className="text-xs text-slate-700 font-medium mt-1 leading-relaxed">
-                {goldenProductsData.goldenProducts.length > 0 ? (
-                  <>
-                    <strong className="text-amber-950 font-extrabold">{goldenProductsData.goldenProducts.slice(0, 3).map(p => p.name).join(", ")}</strong> are performing exceptionally well with high margin return & consistent sales momentum. Protect buffer stock on these items.
-                  </>
-                ) : (
-                  "Identify high margin and fast turnover products to prioritize purchase orders and prevent stockouts."
-                )}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0 self-start md:self-center">
-            <button
-              onClick={() => setExpiryFilter(expiryFilter === "golden" ? "all" : "golden")}
-              className={cn(
-                "px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs border",
-                expiryFilter === "golden"
-                  ? "bg-amber-600 text-white border-amber-600"
-                  : "bg-white text-amber-900 border-amber-200 hover:bg-amber-100/50"
-              )}
-            >
-              <Award className="w-3.5 h-3.5 text-amber-600" />
-              <span>{expiryFilter === "golden" ? "Showing Golden Only" : "Filter Golden Products"}</span>
-            </button>
-          </div>
-        </div>
+      <div className="space-y-3">
+        <InsightBadge
+          elementId="inventory_stock_distribution"
+          variant="banner"
+          className="w-full"
+        />
       </div>
+
+      {/* SKU Aging & Movement Velocity Alert */}
+      <InsightBadge
+        elementId="inventory_sku_aging"
+        variant="banner"
+        className="w-full"
+      />
 
       {/* Filters Hub with Expiry Track Tabs */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col gap-4 shadow-sm">

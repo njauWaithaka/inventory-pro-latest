@@ -23,6 +23,8 @@ export interface Product {
   materialGroup?: string; // Material Group, e.g. Raw Materials, Finished Goods, Packaging
   unitsSold?: number;
   unitsReceived?: number;
+  salesVelocity?: number;
+  dailyVelocity?: number;
   createdAt: string;
   updatedAt: string;
 
@@ -481,7 +483,7 @@ export type ViewType =
   | 'pos' | 'dashboard' | 'inventory' | 'demand' | 'categories' | 'analytics' | 'sell_through' | 'settings' 
   | 'invoices' | 'receipts' | 'delivery_notes' | 'credit_notes' | 'quotations' | 'proforma'
   | 'warehouses' | 'supplier' | 'reports' | 'warranties' | 'alerts' | 'expiry_tracking' | 'profit_tracking'
-  | 'purchase_orders' | 'grn' | 'mro_issues' | 'procurement_hub'
+  | 'purchase_orders' | 'grn' | 'mro_issues' | 'procurement_hub' | 'reservations'
   | 'expenses' | 'expense_dashboard' | 'record_expense' | 'expense_transactions' | 'pending_expenses' | 'payables' | 'expense_payables' | 'recurring_expenses' | 'petty_cash' | 'expense_budgets' | 'expense_reports' | 'expense_analytics' | 'expense_categories'
   | 'bom' | 'production_orders' | 'production_planning' | 'mrp' | 'material_requisitions' | 'material_issue' | 'wip' | 'production_output' | 'quality_control' | 'cost_analysis' | 'production_analytics'
   | 'customers' | 'suppliers'

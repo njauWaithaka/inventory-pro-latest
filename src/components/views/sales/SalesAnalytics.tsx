@@ -10,6 +10,7 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { useSettings } from '../../../contexts/SettingsContext';
 import { cn } from '../../../lib/utils';
+import { InsightBadge } from '../../common/InsightBadge';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer, ComposedChart, AreaChart, Area,
@@ -692,6 +693,12 @@ export function SalesAnalytics() {
       </div>
 
       {/* Prominent Profit Summary Cards */}
+      <InsightBadge
+        elementId="sales_volume_trajectory"
+        variant="banner"
+        className="w-full"
+      />
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="p-6 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-3xl shadow-lg shadow-blue-600/15 relative overflow-hidden flex flex-col justify-between">
           <div>
@@ -1001,6 +1008,12 @@ export function SalesAnalytics() {
       </div>
 
       {/* Modern Visual Charts Grid: Payment Split & Top Products & Branch Breakdown */}
+      <InsightBadge
+        elementId="sales_top_performers"
+        variant="banner"
+        className="w-full"
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Payment Method Distribution Donut Chart */}

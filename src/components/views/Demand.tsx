@@ -16,6 +16,7 @@ import { db } from '../../lib/firebase';
 import { useSettings } from '../../contexts/SettingsContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCompactNumber, cn } from '../../lib/utils';
+import { InsightBadge } from '../common/InsightBadge';
 
 export function Demand() {
   const { profile, currency } = useSettings();
@@ -628,7 +629,14 @@ export function Demand() {
 
 
       {/* 1. 12 Highly Styled Top KPI Cards with clear Color Coding */}
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
+      <div className="space-y-4">
+        <InsightBadge
+          elementId="demand_forecast_velocity"
+          variant="banner"
+          className="w-full"
+        />
+
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
         {[
           { 
             label: 'Total Demand (Today)', 
@@ -729,7 +737,15 @@ export function Demand() {
             </div>
           </div>
         ))}
+        </div>
       </div>
+
+      {/* Stockout Risk & Horizon Insight */}
+      <InsightBadge
+        elementId="demand_stockout_risk"
+        variant="banner"
+        className="w-full"
+      />
 
       {/* Interactive Trends Analyzer & Scenario Modeling */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -1012,7 +1028,7 @@ export function Demand() {
 
       {/* Detailed Stock Risk & Velocity Ledger */}
       <div className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div>
             <h3 className="font-extrabold text-slate-900 text-base uppercase tracking-tight">Demand Velocity Ledger</h3>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
@@ -1020,6 +1036,12 @@ export function Demand() {
             </p>
           </div>
         </div>
+
+        <InsightBadge
+          elementId="demand_reorder_urgency"
+          variant="banner"
+          className="mb-4"
+        />
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">

@@ -2,19 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, ShoppingCart, Clock, Truck, 
   CheckCircle2, DollarSign, Package, MoreVertical, 
-  Eye, Edit3, ClipboardList, Loader2
+  Eye, Edit3, ClipboardList, Loader2, Bookmark, ArrowUpRight
 } from 'lucide-react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { useSettings } from '../../../contexts/SettingsContext';
 import { cn, formatCompactNumber } from '../../../lib/utils';
-import { PurchaseOrder } from '../../../types';
+import { PurchaseOrder, StockReservation, ViewType } from '../../../types';
 
-export function ProcurementHub() {
+interface ProcurementHubProps {
+  onNavigate?: (view: ViewType) => void;
+}
+
+export function ProcurementHub({ onNavigate }: ProcurementHubProps) {
   const { profile, settings } = useSettings();
   const currency = settings?.currency || 'KSh';
   const [activeTab, setActiveTab] = useState('All Orders');
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [reservations, setReservations] = useState<StockReservation[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,12 +30,9 @@ export function ProcurementHub() {
     }
     
     const poPath = `companies/${profile.companyId}/purchaseOrders`;
-    console.log("ProcurementHub.tsx useEffect: Subscribing to purchase orders path:", poPath);
     const unsubscribePOs = onSnapshot(collection(db, poPath), (snapshot) => {
-      console.log("ProcurementHub.tsx snapshot listener triggered! PO count:", snapshot.docs.length);
       const orders = snapshot.docs.map(doc => {
         const data = doc.data();
-        console.log("ProcurementHub.tsx found PO doc in snapshot:", doc.id, data);
         return { id: doc.id, ...data } as PurchaseOrder;
       });
       setPurchaseOrders(orders);
@@ -40,22 +42,31 @@ export function ProcurementHub() {
       setLoading(false);
     });
 
+    const resPath = `companies/${profile.companyId}/reservations`;
+    const unsubscribeRes = onSnapshot(collection(db, resPath), (snapshot) => {
+      const resList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockReservation));
+      setReservations(resList);
+    }, (err) => {
+      console.error("ProcurementHub.tsx reservations listener error:", err);
+    });
+
     const suppliersPath = `companies/${profile.companyId}/suppliers`;
-    console.log("ProcurementHub.tsx useEffect: Subscribing to suppliers path:", suppliersPath);
     const unsubscribeSuppliers = onSnapshot(collection(db, suppliersPath), (snapshot) => {
       const sups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      console.log("ProcurementHub.tsx suppliers snapshot update. Supplier count:", sups.length);
       setSuppliers(sups);
     }, (err) => {
       console.error("ProcurementHub.tsx suppliers listener error:", err);
     });
 
     return () => {
-      console.log("ProcurementHub.tsx useEffect cleanup: unsubscribing from listeners for companyId =", profile.companyId);
       unsubscribePOs();
+      unsubscribeRes();
       unsubscribeSuppliers();
     };
   }, [profile?.companyId]);
+
+  const activeReservations = reservations.filter(r => r.status === 'ACTIVE');
+  const activeReservedValue = activeReservations.reduce((sum, r) => sum + (r.totalValue || (r.quantity * (r.unitPrice || 0))), 0);
 
   const filteredOrders = purchaseOrders.filter(po => {
     if (activeTab === 'All Orders') return true;
@@ -65,8 +76,8 @@ export function ProcurementHub() {
   const stats = [
     { label: 'Total Orders', value: purchaseOrders.length.toString(), icon: ClipboardList, color: 'text-slate-900', bg: 'bg-slate-50' },
     { label: 'Pending Approval', value: `${currency}${purchaseOrders.filter(p => p.status === 'PENDING').reduce((s, p) => s + (p.totalAmount || 0), 0).toLocaleString()}`, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50' },
-    { label: 'Approved Value', value: `${currency}${purchaseOrders.filter(p => p.status === 'APPROVED').reduce((s, p) => s + (p.totalAmount || 0), 0).toLocaleString()}`, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { label: 'Total Value', value: `${currency}${purchaseOrders.reduce((s, p) => s + (p.totalAmount || 0), 0).toLocaleString()}`, icon: DollarSign, color: 'text-blue-500', bg: 'bg-blue-50' },
+    { label: 'Active Reservations', value: `${activeReservations.length} (${currency}${formatCompactNumber(activeReservedValue)})`, icon: Bookmark, color: 'text-indigo-600', bg: 'bg-indigo-50', isAction: true, targetView: 'reservations' as ViewType },
+    { label: 'Total PO Value', value: `${currency}${purchaseOrders.reduce((s, p) => s + (p.totalAmount || 0), 0).toLocaleString()}`, icon: DollarSign, color: 'text-blue-500', bg: 'bg-blue-50' },
   ];
 
   if (loading) {
@@ -82,21 +93,51 @@ export function ProcurementHub() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Procurement Hub</h2>
-          <p className="text-slate-500 text-sm font-medium mt-1">Global view of purchase cycles and commitments</p>
+          <p className="text-slate-500 text-sm font-medium mt-1">Global view of purchase cycles, commitments, and stock reservations</p>
         </div>
+        {onNavigate && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onNavigate('reservations')}
+              className="h-10 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors border border-indigo-200"
+            >
+              <Bookmark className="w-4 h-4" />
+              <span>Stock Reservations ({activeReservations.length})</span>
+            </button>
+            <button
+              onClick={() => onNavigate('purchase_orders')}
+              className="h-10 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-2 transition-colors shadow-sm"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              <span>Purchase Orders</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, i) => (
-          <div key={i} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", stat.bg, stat.color)}>
-              <stat.icon className="w-5 h-5" />
+          <div 
+            key={i} 
+            onClick={() => stat.isAction && stat.targetView && onNavigate?.(stat.targetView)}
+            className={cn(
+              "bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-4 transition-all hover:shadow-md",
+              stat.isAction && onNavigate ? "cursor-pointer hover:border-indigo-300" : ""
+            )}
+          >
+            <div className="flex items-center gap-4">
+              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", stat.bg, stat.color)}>
+                <stat.icon className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-lg font-black text-slate-900 leading-tight">{stat.value}</p>
+                <p className="text-[10px] font-bold text-slate-400 tracking-tight uppercase leading-none mt-1">{stat.label}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-lg font-black text-slate-900 leading-tight">{stat.value}</p>
-              <p className="text-[10px] font-bold text-slate-400 tracking-tight uppercase leading-none mt-1">{stat.label}</p>
-            </div>
+            {stat.isAction && onNavigate && (
+              <ArrowUpRight className="w-4 h-4 text-slate-400" />
+            )}
           </div>
         ))}
       </div>

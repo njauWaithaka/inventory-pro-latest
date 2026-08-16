@@ -865,7 +865,7 @@ export function ReservationModal({
         <div className="px-6 py-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-indigo-500" />
-            <span>Reserved stock is locked from general checkout and orders to prevent overselling.</span>
+            <span>Reserved stock is locked from general checkout and automatically synced to Procurement &gt; Reservations.</span>
           </div>
           <button
             onClick={onClose}

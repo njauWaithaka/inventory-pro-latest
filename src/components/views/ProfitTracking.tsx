@@ -13,6 +13,7 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
+import { InsightBadge } from '../common/InsightBadge';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#F43F5E', '#8B5CF6', '#06B6D4'];
 
@@ -372,6 +373,12 @@ export function ProfitTracking() {
       </div>
 
       {/* KPI Performance Scorecard Grid */}
+      <InsightBadge
+        elementId="profit_margin_trajectory"
+        variant="banner"
+        className="w-full"
+      />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Gross Sales */}
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-all">
@@ -637,6 +644,12 @@ export function ProfitTracking() {
       </div>
 
       {/* Middle Grid: Category Insights vs Channel margin Breakdown */}
+      <InsightBadge
+        elementId="profit_cogs_breakdown"
+        variant="banner"
+        className="w-full"
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Category Contribution to cumulative profits */}

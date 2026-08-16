@@ -548,7 +548,13 @@ export async function topUpPettyCash(
   companyId: string, 
   amount: number, 
   authorizedBy: string, 
-  notes?: string
+  notes?: string,
+  options?: {
+    source?: string;
+    voucherNumber?: string;
+    targetFloat?: number;
+    minimumThreshold?: number;
+  }
 ): Promise<void> {
   const current = await getPettyCashFloat(companyId);
   const newBalance = (current.currentBalance || 0) + amount;
@@ -559,21 +565,27 @@ export async function topUpPettyCash(
   await setDoc(floatRef, {
     ...current,
     currentBalance: newBalance,
+    targetFloat: options?.targetFloat !== undefined ? options.targetFloat : (current.targetFloat || 10000),
+    minimumThreshold: options?.minimumThreshold !== undefined ? options.minimumThreshold : (current.minimumThreshold || 3000),
     lastReplenished: now
   }, { merge: true });
 
   // Record Transaction
   const pcvId = `pcv_${Date.now()}`;
+  const purposeText = options?.source 
+    ? `Petty Cash Load from ${options.source}` 
+    : 'Petty Cash Float Top-up / Replenishment';
+
   const pcv: PettyCashTransaction = {
     id: pcvId,
-    voucherNumber: `PCV-TOP-${Date.now().toString().slice(-4)}`,
+    voucherNumber: options?.voucherNumber || `PCV-TOP-${Date.now().toString().slice(-4)}`,
     type: 'TOP_UP',
     amount,
     balanceAfter: newBalance,
-    purpose: 'Petty Cash Float Top-up / Replenishment',
-    authorizedBy,
+    purpose: purposeText,
+    authorizedBy: authorizedBy || 'Operations / Finance',
     date: now.split('T')[0],
-    notes: notes || 'Cash float deposit',
+    notes: notes || (options?.source ? `Loaded from ${options.source}` : 'Cash float deposit'),
     createdAt: now
   };
 

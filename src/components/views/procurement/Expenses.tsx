@@ -358,7 +358,18 @@ export function Expenses({ onNavigate }: ExpensesProps) {
           <p className="text-sm text-slate-500 mt-1 font-normal">Track spending, petty cash, and recurring costs</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+          {/* Load Petty Cash button */}
+          <button
+            type="button"
+            onClick={() => setIsTopUpModalOpen(true)}
+            className="h-10 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 font-semibold text-sm border border-emerald-200/80 shadow-2xs transition-all flex items-center gap-2 cursor-pointer active:scale-98"
+            title="Load or top up the petty cash float in cash drawer"
+          >
+            <Wallet className="w-4 h-4 text-emerald-600" />
+            <span>Load Petty Cash</span>
+          </button>
+
           {/* Automate expense button */}
           <button
             type="button"
@@ -415,22 +426,41 @@ export function Expenses({ onNavigate }: ExpensesProps) {
         {/* Card 3: Petty cash balance */}
         <div 
           onClick={() => setIsTopUpModalOpen(true)}
-          className="bg-white rounded-2xl p-5 border border-[#e4e6e9] shadow-[0_2px_8px_rgba(20,20,30,0.03)] flex flex-col justify-between transition-all hover:border-slate-300 cursor-pointer group"
-          title="Click to manage petty cash float"
+          className="bg-white rounded-2xl p-5 border border-[#e4e6e9] shadow-[0_2px_8px_rgba(20,20,30,0.03)] flex flex-col justify-between transition-all hover:border-emerald-300 cursor-pointer group hover:shadow-md"
+          title="Click to load or top up petty cash float"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500">Petty cash balance</span>
-            <span className="text-[10px] text-blue-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
-              Top up +
-            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsTopUpModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-[11px] text-emerald-700 font-bold hover:bg-emerald-100 transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Load Cash
+            </button>
           </div>
           <div className="mt-2">
             <span className="text-2xl sm:text-[26px] font-bold text-slate-900 tracking-tight">
               {currency} {(pettyCashFloat.currentBalance || 8420).toLocaleString()}
             </span>
           </div>
-          <div className="mt-3 text-xs text-amber-600 font-medium">
-            Low - top up soon
+          <div className="mt-3 flex items-center justify-between text-xs">
+            <span className={cn(
+              "font-medium",
+              (pettyCashFloat.currentBalance || 8420) < (pettyCashFloat.minimumThreshold || 5000)
+                ? "text-amber-600"
+                : "text-emerald-600"
+            )}>
+              {(pettyCashFloat.currentBalance || 8420) < (pettyCashFloat.minimumThreshold || 5000)
+                ? "⚠️ Low - top up soon"
+                : "✅ Float Healthy"}
+            </span>
+            <span className="text-slate-400 text-[11px]">
+              Target: {currency} {(pettyCashFloat.targetFloat || 15000).toLocaleString()}
+            </span>
           </div>
         </div>
 
@@ -665,6 +695,7 @@ export function Expenses({ onNavigate }: ExpensesProps) {
             currency={currency}
             categories={categories}
             pettyCashBalance={pettyCashFloat.currentBalance}
+            onOpenLoadPettyCash={() => setIsTopUpModalOpen(true)}
             onSuccess={() => setIsRecordModalOpen(false)}
           />
         )}
@@ -687,7 +718,7 @@ export function Expenses({ onNavigate }: ExpensesProps) {
       </AnimatePresence>
 
       {/* ========================================================================= */}
-      {/* MODAL 3: PETTY CASH TOP-UP                                                */}
+      {/* MODAL 3: PETTY CASH TOP-UP / LOAD PETTY CASH                               */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {isTopUpModalOpen && (
@@ -697,6 +728,7 @@ export function Expenses({ onNavigate }: ExpensesProps) {
             companyId={companyId}
             currency={currency}
             currentBalance={pettyCashFloat.currentBalance}
+            targetFloat={pettyCashFloat.targetFloat}
             onSuccess={() => setIsTopUpModalOpen(false)}
           />
         )}
@@ -736,6 +768,7 @@ interface RecordExpenseDialogProps {
   categories: ExpenseCategory[];
   pettyCashBalance: number;
   onSuccess: () => void;
+  onOpenLoadPettyCash?: () => void;
 }
 
 function RecordExpenseDialog({
@@ -745,7 +778,8 @@ function RecordExpenseDialog({
   currency,
   categories,
   pettyCashBalance,
-  onSuccess
+  onSuccess,
+  onOpenLoadPettyCash
 }: RecordExpenseDialogProps) {
   const [title, setTitle] = useState('');
   const [categoryName, setCategoryName] = useState('Petty cash');
@@ -757,14 +791,18 @@ function RecordExpenseDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isPettyCash = paymentMethod === 'Petty Cash' || categoryName.toLowerCase().includes('petty');
+  const numAmount = parseFloat(amount) || 0;
+  const isInsufficientPettyCash = isPettyCash && numAmount > (pettyCashBalance || 0);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       setError('Please provide an expense description.');
       return;
     }
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
+    const valAmount = parseFloat(amount);
+    if (isNaN(valAmount) || valAmount <= 0) {
       setError('Please enter a valid expense amount.');
       return;
     }
@@ -784,7 +822,7 @@ function RecordExpenseDialog({
         title: title.trim(),
         categoryId,
         categoryName,
-        amount: numAmount,
+        amount: valAmount,
         taxAmount: 0,
         taxDeductible: true,
         vendorName: vendorName.trim() || undefined,
@@ -799,7 +837,7 @@ function RecordExpenseDialog({
       // If method is Petty Cash or Category is Petty cash, deduct from float
       if (paymentMethod === 'Petty Cash' || categoryName.toLowerCase().includes('petty')) {
         await disbursePettyCash(companyId, {
-          amount: numAmount,
+          amount: valAmount,
           purpose: title.trim(),
           recipient: vendorName.trim() || 'Staff / Payee',
           categoryId,
@@ -931,6 +969,36 @@ function RecordExpenseDialog({
               />
             </div>
           </div>
+
+          {/* Petty cash indicator banner if selected */}
+          {isPettyCash && (
+            <div className={cn(
+              "p-3 rounded-xl border flex items-center justify-between text-xs transition-colors",
+              isInsufficientPettyCash 
+                ? "bg-amber-50 border-amber-200 text-amber-900" 
+                : "bg-emerald-50 border-emerald-200 text-emerald-900"
+            )}>
+              <div className="flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>
+                  Available Petty Cash: <strong>{currency} {(pettyCashBalance || 0).toLocaleString()}</strong>
+                  {isInsufficientPettyCash && <span className="text-amber-700 block text-[11px]">⚠️ Insufficient float balance</span>}
+                </span>
+              </div>
+              {onOpenLoadPettyCash && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenLoadPettyCash();
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-emerald-300 hover:bg-emerald-100/50 text-emerald-800 font-bold text-xs shrink-0 shadow-2xs cursor-pointer"
+                >
+                  + Load Cash
+                </button>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -1199,7 +1267,7 @@ function AutomateExpenseDialog({
 }
 
 // -----------------------------------------------------------------------------
-// MODAL COMPONENT: PETTY CASH TOP UP
+// MODAL COMPONENT: PETTY CASH TOP UP / LOAD PETTY CASH
 // -----------------------------------------------------------------------------
 interface PettyCashTopUpDialogProps {
   isOpen: boolean;
@@ -1207,6 +1275,7 @@ interface PettyCashTopUpDialogProps {
   companyId: string;
   currency: string;
   currentBalance: number;
+  targetFloat?: number;
   onSuccess: () => void;
 }
 
@@ -1216,24 +1285,44 @@ function PettyCashTopUpDialog({
   companyId,
   currency,
   currentBalance,
+  targetFloat = 15000,
   onSuccess
 }: PettyCashTopUpDialogProps) {
   const [amount, setAmount] = useState('10000');
-  const [authorizedBy, setAuthorizedBy] = useState('Store Manager');
+  const [source, setSource] = useState('Bank Cash Withdrawal');
+  const [voucherRef, setVoucherRef] = useState(`PCV-TOP-${Date.now().toString().slice(-4)}`);
+  const [authorizedBy, setAuthorizedBy] = useState('Store / Finance Manager');
   const [notes, setNotes] = useState('');
+  const [showAdvancedFloatConfig, setShowAdvancedFloatConfig] = useState(false);
+  const [newTargetFloat, setNewTargetFloat] = useState(targetFloat.toString());
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const numAmount = parseFloat(amount) || 0;
+  const projectedBalance = (currentBalance || 0) + numAmount;
+  const numTargetFloat = parseFloat(newTargetFloat) || targetFloat;
+
+  const quickAmounts = [1000, 2500, 5000, 10000, 20000, 50000];
 
   const handleTopUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) return;
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setError('Please enter a valid deposit amount to load.');
+      return;
+    }
 
     setSubmitting(true);
+    setError(null);
     try {
-      await topUpPettyCash(companyId, numAmount, authorizedBy, notes);
+      await topUpPettyCash(companyId, numAmount, authorizedBy, notes.trim() || undefined, {
+        source,
+        voucherNumber: voucherRef.trim() || undefined,
+        targetFloat: showAdvancedFloatConfig ? numTargetFloat : undefined
+      });
       onSuccess();
-    } catch (err) {
-      console.error('Failed to top up petty cash:', err);
+    } catch (err: any) {
+      console.error('Failed to load petty cash:', err);
+      setError(err?.message || 'Failed to load petty cash float.');
     } finally {
       setSubmitting(false);
     }
@@ -1245,12 +1334,17 @@ function PettyCashTopUpDialog({
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
-        className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200"
+        className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200"
       >
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">Petty Cash Top-up</h3>
-            <p className="text-xs text-slate-500">Current balance: <span className="font-bold text-slate-900">{currency} {currentBalance?.toLocaleString()}</span></p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <Wallet className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Load Petty Cash</h3>
+              <p className="text-xs text-slate-500">Deposit funds into cash drawer float for small daily expenses</p>
+            </div>
           </div>
           <button 
             onClick={onClose}
@@ -1260,46 +1354,160 @@ function PettyCashTopUpDialog({
           </button>
         </div>
 
+        {error && (
+          <div className="mt-4 p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600 font-medium flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <form onSubmit={handleTopUp} className="mt-5 space-y-4">
+          {/* Quick Preset Buttons */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Top-up Deposit Amount ({currency})
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Quick Load Amount ({currency})
             </label>
-            <input
-              type="number"
-              required
-              min="100"
-              step="100"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full h-10 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-[#1a8a5f] outline-hidden font-bold"
-            />
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+              {quickAmounts.map((qAmt) => (
+                <button
+                  key={qAmt}
+                  type="button"
+                  onClick={() => setAmount(qAmt.toString())}
+                  className={cn(
+                    "py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center",
+                    numAmount === qAmt
+                      ? "bg-emerald-600 border-emerald-600 text-white shadow-2xs"
+                      : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                  )}
+                >
+                  +{qAmt >= 1000 ? `${(qAmt / 1000)}k` : qAmt}
+                </button>
+              ))}
+            </div>
           </div>
 
+          {/* Amount Input */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Authorized By
+              Deposit Amount to Load ({currency}) <span className="text-rose-500">*</span>
             </label>
-            <input
-              type="text"
-              required
-              value={authorizedBy}
-              onChange={(e) => setAuthorizedBy(e.target.value)}
-              className="w-full h-10 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-[#1a8a5f] outline-hidden font-medium"
-            />
+            <div className="relative">
+              <input
+                type="number"
+                required
+                min="100"
+                step="any"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="10,000"
+                className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-base focus:bg-white focus:ring-2 focus:ring-[#1a8a5f] outline-hidden font-bold text-slate-900"
+              />
+            </div>
           </div>
 
+          {/* Source & Voucher Ref */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Funding Source
+              </label>
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-[#1a8a5f] outline-hidden font-medium"
+              >
+                <option value="Bank Cash Withdrawal">Bank Cash Withdrawal</option>
+                <option value="Main Cash Register / Till">Main Cash Register / Till</option>
+                <option value="Director / Owner Injection">Director / Owner Injection</option>
+                <option value="M-Pesa Business Float Transfer">M-Pesa Business Float</option>
+                <option value="Sales Revenue Cash Drawer">Sales Revenue Cash Drawer</option>
+                <option value="Other Cash Source">Other Cash Source</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Voucher / Ref #
+              </label>
+              <input
+                type="text"
+                value={voucherRef}
+                onChange={(e) => setVoucherRef(e.target.value)}
+                placeholder="e.g. PCV-TOP-001, Bank Slip #"
+                className="w-full h-10 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-[#1a8a5f] outline-hidden font-medium"
+              />
+            </div>
+          </div>
+
+          {/* Authorized By & Notes */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Authorized By / Custodian
+              </label>
+              <input
+                type="text"
+                required
+                value={authorizedBy}
+                onChange={(e) => setAuthorizedBy(e.target.value)}
+                className="w-full h-10 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-[#1a8a5f] outline-hidden font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Notes / Memo (Optional)
+              </label>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. Weekly float top-up"
+                className="w-full h-10 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-[#1a8a5f] outline-hidden font-medium"
+              />
+            </div>
+          </div>
+
+          {/* Live Calculation Preview Banner */}
+          <div className="p-3.5 bg-emerald-50/70 border border-emerald-100 rounded-xl space-y-1.5 text-xs">
+            <div className="flex items-center justify-between text-slate-600 font-medium">
+              <span>Current Cash in Drawer:</span>
+              <span>{currency} {(currentBalance || 0).toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between text-emerald-700 font-semibold">
+              <span>+ Deposit to Load:</span>
+              <span>+{currency} {numAmount.toLocaleString()}</span>
+            </div>
+            <div className="pt-1.5 border-t border-emerald-200/80 flex items-center justify-between font-bold text-slate-900 text-sm">
+              <span>New Float Balance:</span>
+              <span className="text-emerald-800">{currency} {projectedBalance.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Advanced Target Float Settings Toggle */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Notes / Voucher Ref
-            </label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Monthly float replenishment from main bank"
-              className="w-full h-10 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-[#1a8a5f] outline-hidden font-medium"
-            />
+            <button
+              type="button"
+              onClick={() => setShowAdvancedFloatConfig(!showAdvancedFloatConfig)}
+              className="text-xs text-slate-500 hover:text-slate-800 font-medium flex items-center gap-1 transition-colors"
+            >
+              <span>{showAdvancedFloatConfig ? '▼ Hide float target settings' : '▶ Adjust target float limit'}</span>
+            </button>
+
+            {showAdvancedFloatConfig && (
+              <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+                <label className="block font-semibold text-slate-700">
+                  Target Maximum Float Limit ({currency})
+                </label>
+                <input
+                  type="number"
+                  value={newTargetFloat}
+                  onChange={(e) => setNewTargetFloat(e.target.value)}
+                  className="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                />
+                <p className="text-[11px] text-slate-400">Sets the recommended maximum cash kept in the petty cash drawer.</p>
+              </div>
+            )}
           </div>
 
           <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
@@ -1312,11 +1520,11 @@ function PettyCashTopUpDialog({
             </button>
             <button
               type="submit"
-              disabled={submitting}
-              className="h-10 px-5 rounded-xl bg-[#1a8a5f] hover:bg-[#157952] text-white text-sm font-medium transition-all shadow-xs flex items-center gap-2 disabled:opacity-50"
+              disabled={submitting || numAmount <= 0}
+              className="h-10 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all shadow-xs flex items-center gap-2 disabled:opacity-50"
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
-              <span>Top Up Float</span>
+              <span>Confirm & Load Float</span>
             </button>
           </div>
         </form>

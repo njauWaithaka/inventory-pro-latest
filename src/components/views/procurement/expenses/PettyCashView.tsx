@@ -35,7 +35,9 @@ export function PettyCashView({
   const [submitting, setSubmitting] = useState(false);
 
   // Top up state
-  const [topUpAmount, setTopUpAmount] = useState('');
+  const [topUpAmount, setTopUpAmount] = useState('10000');
+  const [topUpSource, setTopUpSource] = useState('Bank Cash Withdrawal');
+  const [topUpVoucher, setTopUpVoucher] = useState('');
   const [topUpNotes, setTopUpNotes] = useState('');
 
   // Disburse state
@@ -57,6 +59,10 @@ export function PettyCashView({
     return [...transactions].sort((a, b) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
   }, [transactions]);
 
+  const quickAmounts = [1000, 2500, 5000, 10000, 20000, 50000];
+  const numTopUpAmount = parseFloat(topUpAmount) || 0;
+  const projectedBalance = currentBalance + numTopUpAmount;
+
   const handleTopUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyId) return;
@@ -65,10 +71,14 @@ export function PettyCashView({
 
     setSubmitting(true);
     try {
-      await topUpPettyCash(companyId, amt, authorizerName, topUpNotes.trim());
+      await topUpPettyCash(companyId, amt, authorizerName, topUpNotes.trim(), {
+        source: topUpSource,
+        voucherNumber: topUpVoucher.trim() || undefined
+      });
       setIsTopUpOpen(false);
       setTopUpAmount('');
       setTopUpNotes('');
+      setTopUpVoucher('');
     } catch (err) {
       console.error('Failed to top up petty cash:', err);
     } finally {
@@ -135,9 +145,9 @@ export function PettyCashView({
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={() => setIsTopUpOpen(true)}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all flex items-center gap-2"
+            className="px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 text-xs font-bold transition-all flex items-center gap-2 shadow-2xs"
           >
-            <ArrowUpRight className="w-4 h-4 text-emerald-600" /> Top-up Cash Float
+            <Wallet className="w-4 h-4 text-emerald-700" /> Load Petty Cash
           </button>
           <button
             onClick={() => setIsDisburseOpen(true)}
@@ -305,7 +315,7 @@ export function PettyCashView({
         )}
       </div>
 
-      {/* Top-up Modal */}
+      {/* Load Petty Cash Top Up Modal */}
       <AnimatePresence>
         {isTopUpOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
@@ -313,16 +323,16 @@ export function PettyCashView({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden p-6 space-y-4"
+              className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden p-6 space-y-4"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                    <ArrowUpRight className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                    <Wallet className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-base font-bold text-slate-900">Replenish Petty Cash Float</h4>
-                    <p className="text-xs text-slate-400">Current Balance: {currency} {currentBalance.toLocaleString()}</p>
+                    <h4 className="text-base font-bold text-slate-900">Load Petty Cash Float</h4>
+                    <p className="text-xs text-slate-500">Deposit funds into cash drawer float</p>
                   </div>
                 </div>
                 <button onClick={() => setIsTopUpOpen(false)} className="p-2 text-slate-400 hover:text-slate-700">
@@ -331,9 +341,33 @@ export function PettyCashView({
               </div>
 
               <form onSubmit={handleTopUpSubmit} className="space-y-4">
+                {/* Quick Preset Buttons */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Quick Preset Amount ({currency})
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    {quickAmounts.map((qAmt) => (
+                      <button
+                        key={qAmt}
+                        type="button"
+                        onClick={() => setTopUpAmount(qAmt.toString())}
+                        className={cn(
+                          "py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center",
+                          numTopUpAmount === qAmt
+                            ? "bg-emerald-600 border-emerald-600 text-white shadow-2xs"
+                            : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                        )}
+                      >
+                        +{qAmt >= 1000 ? `${(qAmt / 1000)}k` : qAmt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Top-up Amount ({currency}) <span className="text-rose-500">*</span>
+                    Deposit Amount to Load ({currency}) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -347,17 +381,66 @@ export function PettyCashView({
                   />
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Funding Source
+                    </label>
+                    <select
+                      value={topUpSource}
+                      onChange={(e) => setTopUpSource(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white outline-none"
+                    >
+                      <option value="Bank Cash Withdrawal">Bank Cash Withdrawal</option>
+                      <option value="Main Cash Register / Till">Main Cash Register / Till</option>
+                      <option value="Director / Owner Injection">Director / Owner Injection</option>
+                      <option value="M-Pesa Business Float Transfer">M-Pesa Business Float</option>
+                      <option value="Sales Revenue Cash Drawer">Sales Revenue Cash Drawer</option>
+                      <option value="Other Cash Source">Other Cash Source</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Voucher / Slip Ref #
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Bank slip #, PCV-001"
+                      value={topUpVoucher}
+                      onChange={(e) => setTopUpVoucher(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white outline-none"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Source / Notes
+                    Notes / Description
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g., Bank Cash Withdrawal, Main Safe Deposit"
+                    placeholder="e.g., Weekly float replenishment from branch bank account"
                     value={topUpNotes}
                     onChange={(e) => setTopUpNotes(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
+                </div>
+
+                {/* Calculation preview */}
+                <div className="p-3.5 bg-emerald-50/70 border border-emerald-100 rounded-xl space-y-1 text-xs">
+                  <div className="flex items-center justify-between text-slate-600 font-medium">
+                    <span>Current Drawer Balance:</span>
+                    <span>{currency} {currentBalance.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-emerald-700 font-semibold">
+                    <span>+ Deposit to Load:</span>
+                    <span>+{currency} {numTopUpAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="pt-1.5 border-t border-emerald-200/80 flex items-center justify-between font-bold text-slate-900 text-sm">
+                    <span>New Float Balance:</span>
+                    <span className="text-emerald-800">{currency} {projectedBalance.toLocaleString()}</span>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
@@ -370,11 +453,11 @@ export function PettyCashView({
                   </button>
                   <button
                     type="submit"
-                    disabled={submitting}
-                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                    disabled={submitting || numTopUpAmount <= 0}
+                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 disabled:opacity-50"
                   >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                    Confirm Top-up
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
+                    Confirm & Load Float
                   </button>
                 </div>
               </form>

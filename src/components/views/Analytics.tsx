@@ -22,6 +22,7 @@ import { SalesPerformanceTrend } from './analytics/SalesPerformanceTrend';
 import { TopProductsAnalytics } from './analytics/TopProductsAnalytics';
 import { InventoryHealthOverview } from './analytics/InventoryHealthOverview';
 import { ReorderStockoutIntelligence } from './analytics/ReorderStockoutIntelligence';
+import { SellThroughAndFillRateSection } from './analytics/SellThroughAndFillRateSection';
 import { 
   TrendingUp, DollarSign, Package, BarChart3, Calendar, RotateCcw, FileDown, 
   Activity, MousePointer2, Clock, Ban, ChevronDown, CheckCircle2, ShieldCheck, 
@@ -35,10 +36,15 @@ import { db } from '../../lib/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { motion } from 'motion/react';
+import { InsightBadge } from '../common/InsightBadge';
 
 const COLORS = ['#3b82f6', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#64748b'];
 
-export function Analytics() {
+interface AnalyticsProps {
+  defaultTab?: string;
+}
+
+export function Analytics({ defaultTab }: AnalyticsProps = {}) {
   const { user } = useAuth();
   const { profile, company, currency } = useSettings();
   const [products, setProducts] = useState<any[]>([]);
@@ -303,10 +309,10 @@ export function Analytics() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
         <div>
           <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-            Inventory & Business Intelligence
+            Analytics
           </h2>
           <p className="text-slate-500 text-[11px] sm:text-sm font-medium mt-1">
-            Real-time analytics, stock coverage, margin performance, and demand forecasting
+            Real-time business performance, sell-through rate, fill rate, inventory velocity, and financial health
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -377,7 +383,21 @@ export function Analytics() {
         selectedPeriod={selectedPeriod} 
       />
 
-      {/* 2. DYNAMIC ACTIONABLE INSIGHTS SECTION */}
+      {/* 2. SELL-THROUGH RATE (STR) & ORDER FILL RATE (OTIF) SECTION */}
+      <SellThroughAndFillRateSection
+        analytics={comprehensiveAnalytics}
+        products={allProducts}
+        currency={currency}
+        selectedPeriod={selectedPeriod}
+      />
+
+      {/* 3. DYNAMIC ACTIONABLE INSIGHTS SECTION */}
+      <InsightBadge
+        elementId="analytics_turnover_efficiency"
+        variant="banner"
+        className="w-full"
+      />
+
       <ActionableInsightsSection 
         insights={comprehensiveAnalytics.actionableInsights} 
       />
@@ -473,6 +493,12 @@ export function Analytics() {
       />
 
       {/* 5. TOP PRODUCTS (4 PERSPECTIVES) & CATEGORY DISTRIBUTION */}
+      <InsightBadge
+        elementId="analytics_sell_through"
+        variant="banner"
+        className="w-full"
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
         {/* Top Products in 4 Distinct Perspectives */}
         <TopProductsAnalytics 
@@ -669,6 +695,12 @@ export function Analytics() {
       </div>
 
       {/* 10. PRESERVED ABC ANALYSIS SECTION */}
+      <InsightBadge
+        elementId="analytics_pareto_distribution"
+        variant="banner"
+        className="w-full"
+      />
+
       <div className="w-full">
         <ABCAnalysisSection products={allProducts} currency={currency} />
       </div>
