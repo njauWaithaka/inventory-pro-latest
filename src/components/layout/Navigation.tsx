@@ -53,6 +53,7 @@ import { ViewType, Product } from "../../types";
 import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useSettings } from "../../contexts/SettingsContext";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
@@ -212,7 +213,8 @@ export function Sidebar({
   isCollapsed,
   onToggleCollapse,
 }: SidebarProps) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
+  const { profile } = useSettings();
   const [activeAlertsCount, setActiveAlertsCount] = React.useState(0);
   const [isLargeScreen, setIsLargeScreen] = React.useState(false);
   const [expandedSections, setExpandedSections] = React.useState<
@@ -480,7 +482,8 @@ export function Sidebar({
 }
 
 export function Navbar({ onMenuClick, currentView }: { onMenuClick: () => void; currentView?: ViewType }) {
-  const { user, profile, logout } = useAuth();
+  const { user, logout } = useAuth();
+  const { profile } = useSettings();
   const title = user?.displayName || user?.email?.split("@")[0] || "User";
   const [activeAlertCount, setActiveAlertCount] = useState(0);
 

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { InsightBadge } from '../common/InsightBadge';
 
 type ReportCategory = 
   | 'Acquisition' | 'Behavior' | 'Sales' 
@@ -107,6 +108,13 @@ export function Reports() {
             </button>
           </div>
         </div>
+
+        {/* Dynamic Intelligence Telemetry */}
+        <InsightBadge
+          elementId="analytics_turnover_ratio"
+          variant="banner"
+          className="w-full"
+        />
 
         {/* Large Search bar */}
         <div className="relative group shadow-sm bg-white rounded-xl">

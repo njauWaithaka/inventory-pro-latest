@@ -9,6 +9,7 @@ import { db } from '../../../lib/firebase';
 import { useSettings } from '../../../contexts/SettingsContext';
 import { cn, formatCompactNumber } from '../../../lib/utils';
 import { PurchaseOrder, StockReservation, ViewType } from '../../../types';
+import { InsightBadge } from '../../common/InsightBadge';
 
 interface ProcurementHubProps {
   onNavigate?: (view: ViewType) => void;
@@ -141,6 +142,13 @@ export function ProcurementHub({ onNavigate }: ProcurementHubProps) {
           </div>
         ))}
       </div>
+
+      {/* Dynamic Intelligence Telemetry */}
+      <InsightBadge
+        elementId="procurement_reservations_health"
+        variant="banner"
+        className="w-full"
+      />
 
       {/* Tabs and Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-left">

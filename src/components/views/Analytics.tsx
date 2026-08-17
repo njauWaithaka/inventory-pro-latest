@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, ScatterChart, Scatter, ZAxis, Legend
+  PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, Legend
 } from 'recharts';
 import { cn, formatCompactNumber, getSellThroughRate, getProductMovementSpeed } from '../../lib/utils';
 import { ABCAnalysisSection } from './ABCAnalysisSection';
@@ -23,6 +23,7 @@ import { TopProductsAnalytics } from './analytics/TopProductsAnalytics';
 import { InventoryHealthOverview } from './analytics/InventoryHealthOverview';
 import { ReorderStockoutIntelligence } from './analytics/ReorderStockoutIntelligence';
 import { SellThroughAndFillRateSection } from './analytics/SellThroughAndFillRateSection';
+import { TiedUpCapitalSection } from './analytics/TiedUpCapitalSection';
 import { 
   TrendingUp, DollarSign, Package, BarChart3, Calendar, RotateCcw, FileDown, 
   Activity, MousePointer2, Clock, Ban, ChevronDown, CheckCircle2, ShieldCheck, 
@@ -270,15 +271,6 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
 
   // ABC Analysis (70/20/10 rule simulation based on value density)
   const sortedByValue = [...allProducts].sort((a, b) => (b.value * b.quantity) - (a.value * a.quantity));
-  
-  // Scatter Data: Price vs Quantity
-  const scatterData = allProducts.map(p => ({
-    name: p.name,
-    quantity: p.quantity,
-    price: p.value,
-    totalValue: p.value * p.quantity,
-    category: p.category
-  })).slice(0, 50); // Top 50 to avoid clutter
 
   let cumulativeValue = 0;
   const abcAnalysis = [
@@ -632,58 +624,8 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
         </div>
       </div>
 
-      {/* 8. PRESERVED SCATTER PLOT: PRICE VS QUANTITY ANALYSIS */}
-      <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-left">
-        <div className="mb-6">
-          <h3 className="text-lg font-extrabold text-slate-900">Price vs Quantity (Scatter Plot)</h3>
-          <p className="text-xs font-medium text-slate-400 mt-0.5">Identifying high-value outliers and stocking efficiency</p>
-        </div>
-        <div className="h-[350px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis 
-                type="number" 
-                dataKey="quantity" 
-                name="Stock Quantity" 
-                axisLine={false} 
-                tickLine={false}
-                label={{ value: 'Quantity', position: 'insideBottom', offset: -10, fontSize: 10, fontWeight: 700 }}
-              />
-              <YAxis 
-                type="number" 
-                dataKey="price" 
-                name="Unit Price" 
-                axisLine={false} 
-                tickLine={false}
-                tickFormatter={(val) => `${currency}${val}`}
-                label={{ value: 'Price', angle: -90, position: 'insideLeft', fontSize: 10, fontWeight: 700 }}
-              />
-              <ZAxis type="number" dataKey="totalValue" range={[64, 400]} name="Total Value" />
-              <Tooltip 
-                cursor={{ strokeDasharray: '3 3' }} 
-                content={({ payload }) => {
-                  if (payload && payload.length) {
-                    const data = payload[0].payload;
-                    return (
-                      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xl text-left">
-                        <p className="text-xs font-black text-slate-900 mb-2 truncate max-w-[200px]">{data.name}</p>
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-bold text-slate-500">Price: <span className="text-slate-900">{currency}{data.price}</span></p>
-                          <p className="text-[10px] font-bold text-slate-500">Stock: <span className="text-slate-900">{data.quantity} units</span></p>
-                          <p className="text-[10px] font-bold text-slate-500">Value: <span className="text-blue-600">{currency}{data.totalValue.toLocaleString()}</span></p>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Scatter name="Products" data={scatterData} fill="#3b82f6" fillOpacity={0.6} />
-            </ScatterChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      {/* 8. CAPITAL CONCENTRATION & TIED UP CAPITAL DIAGNOSTIC */}
+      <TiedUpCapitalSection products={allProducts} currency={currency} />
 
       {/* 9. PRESERVED SKU MOVEMENT CLASSIFICATION & AGING DASHBOARD */}
       <div className="w-full">

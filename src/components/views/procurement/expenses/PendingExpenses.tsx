@@ -7,6 +7,7 @@ import {
 import { Expense, ExpenseCategory } from '../../../../types';
 import { approveExpense, rejectExpense } from '../../../../lib/expenseService';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { useSettings } from '../../../../contexts/SettingsContext';
 import { cn } from '../../../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -25,7 +26,8 @@ export function PendingExpenses({
   currency,
   onViewExpense
 }: PendingExpensesProps) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
+  const { profile } = useSettings();
   const approverName = profile?.name || user?.displayName || 'Finance Manager';
 
   const [rejectingExpense, setRejectingExpense] = useState<Expense | null>(null);

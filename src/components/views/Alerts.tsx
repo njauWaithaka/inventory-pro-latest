@@ -10,6 +10,7 @@ import { handleFirestoreError, OperationType } from '../../lib/firestoreUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { cn } from '../../lib/utils';
+import { InsightBadge } from '../common/InsightBadge';
 
 export function Alerts() {
   const { user } = useAuth();
@@ -145,6 +146,13 @@ export function Alerts() {
           </div>
         ))}
       </div>
+
+      {/* Dynamic Intelligence Telemetry */}
+      <InsightBadge
+        elementId="alerts_risk_breakdown"
+        variant="banner"
+        className="w-full"
+      />
 
       {/* Tabs */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-left">

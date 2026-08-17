@@ -14,6 +14,7 @@ import {
   getInsightsSnapshot,
   generateInsights,
   generateLocalFallbackInsights,
+  groupInsightsByElement,
   getCachedInsights,
   setCachedInsights,
   getCachedInsightsTimestamp,
@@ -22,7 +23,10 @@ import {
 
 interface InsightsContextType {
   insights: Record<InsightElementId, DynamicInsight>;
+  insightsByElement: Record<InsightElementId, DynamicInsight[]>;
+  allInsights: DynamicInsight[];
   getInsight: (elementId: InsightElementId) => DynamicInsight;
+  getInsightsList: (elementId: InsightElementId) => DynamicInsight[];
   isRegenerating: boolean;
   lastGeneratedAt: string | null;
   snapshot: InsightsSnapshot | null;
@@ -45,23 +49,43 @@ export function InsightsProvider({ children }: { children: React.ReactNode }) {
   const [expenses, setExpenses] = useState<any[]>([]);
 
   const [snapshot, setSnapshot] = useState<InsightsSnapshot | null>(null);
-  const [insights, setInsights] = useState<Record<InsightElementId, DynamicInsight>>(() => {
+
+  // Raw insights list
+  const [allInsights, setAllInsights] = useState<DynamicInsight[]>(() => {
     if (companyId) {
       const cached = getCachedInsights(companyId);
-      if (cached) return cached;
+      if (cached && cached.length > 0) return cached;
     }
-    // Initialize default fallback
     const initSnapshot = getInsightsSnapshot({ products: [] });
-    const fallbacks = generateLocalFallbackInsights(initSnapshot, currency || 'KSh');
-    const map: Record<string, DynamicInsight> = {};
-    fallbacks.forEach((f) => {
-      map[f.elementId] = f;
-    });
-    return map as Record<InsightElementId, DynamicInsight>;
+    return generateLocalFallbackInsights(initSnapshot, currency || 'KSh');
   });
 
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
+
+  // Grouped by element ID
+  const insightsByElement = useMemo(() => {
+    return groupInsightsByElement(allInsights);
+  }, [allInsights]);
+
+  // Single top insight record per element
+  const insights = useMemo(() => {
+    const map: Partial<Record<InsightElementId, DynamicInsight>> = {};
+    ALL_INSIGHT_ELEMENT_IDS.forEach((id) => {
+      const list = insightsByElement[id] || [];
+      if (list.length > 0) {
+        map[id] = list[0];
+      } else {
+        map[id] = {
+          elementId: id,
+          severity: 'neutral',
+          text: 'Monitoring live inventory telemetry.',
+          relatedSku: null,
+        };
+      }
+    });
+    return map as Record<InsightElementId, DynamicInsight>;
+  }, [insightsByElement]);
 
   // Debounce ref
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -74,8 +98,8 @@ export function InsightsProvider({ children }: { children: React.ReactNode }) {
 
     // Load any existing cache for this company
     const cached = getCachedInsights(companyId);
-    if (cached) {
-      setInsights(cached);
+    if (cached && cached.length > 0) {
+      setAllInsights(cached);
     }
 
     const basePath = `companies/${companyId}`;
@@ -123,9 +147,12 @@ export function InsightsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setSnapshot(currentSnapshot);
-  }, [currentSnapshot]);
+    // Refresh deterministic multi-angle insights immediately when data changes
+    const fallbackList = generateLocalFallbackInsights(currentSnapshot, currency || 'KSh');
+    setAllInsights(fallbackList);
+  }, [currentSnapshot, currency]);
 
-  // 3. Execution trigger: regenerate insights via Gemini API with debouncing & TTL checks
+  // 3. Execution trigger: regenerate insights with debouncing & TTL checks
   const executeGeneration = useCallback(
     async (targetSnapshot: InsightsSnapshot) => {
       if (!companyId) return;
@@ -133,26 +160,9 @@ export function InsightsProvider({ children }: { children: React.ReactNode }) {
       setIsRegenerating(true);
       try {
         const generatedList = await generateInsights(targetSnapshot, currency || 'KSh');
-        const nextMap: Record<string, DynamicInsight> = {};
-
-        generatedList.forEach((ins) => {
-          nextMap[ins.elementId] = ins;
-        });
-
-        // Ensure all 16 fixed elements exist
-        ALL_INSIGHT_ELEMENT_IDS.forEach((id) => {
-          if (!nextMap[id]) {
-            const fallback = generateLocalFallbackInsights(targetSnapshot, currency || 'KSh').find(
-              (f) => f.elementId === id
-            );
-            if (fallback) nextMap[id] = fallback;
-          }
-        });
-
-        const finalRecord = nextMap as Record<InsightElementId, DynamicInsight>;
-        setInsights(finalRecord);
+        setAllInsights(generatedList);
         setLastGeneratedAt(new Date().toISOString());
-        setCachedInsights(companyId, finalRecord);
+        setCachedInsights(companyId, generatedList);
       } catch (err) {
         console.warn('Insights background regeneration error handled gracefully:', err);
       } finally {
@@ -205,10 +215,9 @@ export function InsightsProvider({ children }: { children: React.ReactNode }) {
 
   const getInsight = useCallback(
     (elementId: InsightElementId): DynamicInsight => {
-      if (insights[elementId]) {
-        return insights[elementId];
-      }
-      // Fallback
+      const list = insightsByElement[elementId] || [];
+      if (list.length > 0) return list[0];
+
       const fallbackList = generateLocalFallbackInsights(
         currentSnapshot || getInsightsSnapshot({ products: [] }),
         currency || 'KSh'
@@ -223,7 +232,31 @@ export function InsightsProvider({ children }: { children: React.ReactNode }) {
         }
       );
     },
-    [insights, currentSnapshot, currency]
+    [insightsByElement, currentSnapshot, currency]
+  );
+
+  const getInsightsList = useCallback(
+    (elementId: InsightElementId): DynamicInsight[] => {
+      const list = insightsByElement[elementId] || [];
+      if (list.length > 0) return list;
+
+      const fallbackList = generateLocalFallbackInsights(
+        currentSnapshot || getInsightsSnapshot({ products: [] }),
+        currency || 'KSh'
+      );
+      const found = fallbackList.filter((f) => f.elementId === elementId);
+      return found.length > 0
+        ? found
+        : [
+            {
+              elementId,
+              severity: 'neutral',
+              text: 'Monitoring live inventory telemetry.',
+              relatedSku: null,
+            },
+          ];
+    },
+    [insightsByElement, currentSnapshot, currency]
   );
 
   const regenerateInsights = useCallback(async () => {
@@ -236,7 +269,10 @@ export function InsightsProvider({ children }: { children: React.ReactNode }) {
     <InsightsContext.Provider
       value={{
         insights,
+        insightsByElement,
+        allInsights,
         getInsight,
+        getInsightsList,
         isRegenerating,
         lastGeneratedAt,
         snapshot,

@@ -14,9 +14,10 @@ import {
   subscribeToExpenseBudgets, subscribeToRecurringExpenses, 
   subscribeToPettyCash, subscribeToPettyCashFloat, 
   seedDefaultExpenseCategories, seedDefaultExpenseBudgets,
-  topUpPettyCash 
+  ensureExpenseDefaults, topUpPettyCash 
 } from '../../../../lib/expenseService';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { useSettings } from '../../../../contexts/SettingsContext';
 import { RecordExpenseModal } from './RecordExpenseModal';
 import { ExpenseDashboard } from './ExpenseDashboard';
 import { ExpenseTransactions } from './ExpenseTransactions';
@@ -28,6 +29,7 @@ import { ExpenseBudgetsView } from './ExpenseBudgetsView';
 import { ExpenseReportsView } from './ExpenseReportsView';
 import { ExpenseAnalyticsView } from './ExpenseAnalyticsView';
 import { ExpenseCategoriesView } from './ExpenseCategoriesView';
+import { InsightBadge } from '../../../common/InsightBadge';
 import { cn } from '../../../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -37,9 +39,10 @@ interface ExpensesHubProps {
 }
 
 export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }: ExpensesHubProps) {
-  const { currentCompany } = useAuth();
-  const companyId = currentCompany?.id || '';
-  const currency = currentCompany?.currency || 'KES';
+  const { user } = useAuth();
+  const { profile, company, currency: contextCurrency, loading: settingsLoading } = useSettings();
+  const companyId = profile?.companyId || company?.id || '';
+  const currency = company?.currency || contextCurrency || 'KES';
 
   const normalizeSubView = (subView?: string) => {
     if (!subView || subView === 'expenses') return 'expense_dashboard';
@@ -80,7 +83,6 @@ export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }
   const [topUpNotes, setTopUpNotes] = useState('');
   const [submittingTopUp, setSubmittingTopUp] = useState(false);
 
-  const { user, profile } = useAuth();
   const authorizerName = profile?.name || user?.displayName || 'Finance Officer';
 
   const handleTopUpSubmit = async (e: React.FormEvent) => {
@@ -108,8 +110,18 @@ export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }
 
   // Data Subscriptions
   useEffect(() => {
-    if (!companyId) return;
+    if (!companyId) {
+      if (!settingsLoading) {
+        setLoading(false);
+      }
+      return;
+    }
     setLoading(true);
+
+    // Ensure defaults exist for this company in background
+    ensureExpenseDefaults(companyId).catch((err) => {
+      console.warn('ensureExpenseDefaults notice:', err);
+    });
 
     const unsubCategories = subscribeToExpenseCategories(companyId, async (cats) => {
       if (cats.length === 0) {
@@ -144,7 +156,13 @@ export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }
       setPettyCashFloat(floatMeta);
     });
 
+    // Safety timeout to guarantee UI renders even if network is slow
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 1200);
+
     return () => {
+      clearTimeout(safetyTimer);
       unsubCategories();
       unsubBudgets();
       unsubExpenses();
@@ -152,7 +170,7 @@ export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }
       unsubPettyCash();
       unsubFloat();
     };
-  }, [companyId]);
+  }, [companyId, settingsLoading]);
 
   // Tab Definitions
   const tabs = [
@@ -247,6 +265,13 @@ export function ExpensesHub({ currentSubView = 'expense_dashboard', onNavigate }
           </div>
         </div>
       </div>
+
+      {/* Dynamic Intelligence Telemetry */}
+      <InsightBadge
+        elementId="procurement_expenses_leakage"
+        variant="banner"
+        className="w-full"
+      />
 
       {/* Tab View Container */}
       <motion.div

@@ -9,6 +9,7 @@ import {
 } from '../../../../types';
 import { topUpPettyCash, disbursePettyCash } from '../../../../lib/expenseService';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { useSettings } from '../../../../contexts/SettingsContext';
 import { cn } from '../../../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -27,7 +28,8 @@ export function PettyCashView({
   companyId,
   currency
 }: PettyCashViewProps) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
+  const { profile } = useSettings();
   const authorizerName = profile?.name || user?.displayName || 'Finance Officer';
 
   const [isTopUpOpen, setIsTopUpOpen] = useState(false);

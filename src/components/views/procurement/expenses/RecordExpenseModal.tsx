@@ -11,6 +11,7 @@ import {
 import { addExpense, updateExpense } from '../../../../lib/expenseService';
 import { cn } from '../../../../lib/utils';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { useSettings } from '../../../../contexts/SettingsContext';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface RecordExpenseModalProps {
@@ -54,7 +55,8 @@ export function RecordExpenseModal({
   onSaved
 }: RecordExpenseModalProps) {
   const currentEditExpense = editExpense || initialExpense;
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
+  const { profile } = useSettings();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

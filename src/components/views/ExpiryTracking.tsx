@@ -42,6 +42,7 @@ import { Product } from "../../types";
 import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { ConfirmationModal } from "../ConfirmationModal";
+import { InsightBadge } from "../common/InsightBadge";
 import {
   ResponsiveContainer,
   PieChart,
@@ -119,8 +120,8 @@ const getProductMarginInfo = (p: Product) => {
 };
 
 export function ExpiryTracking() {
-  const { profile } = useAuth();
-  const { currency } = useSettings();
+  const { user } = useAuth();
+  const { profile, currency } = useSettings();
   
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -702,6 +703,13 @@ export function ExpiryTracking() {
           </div>
         </div>
       </div>
+
+      {/* Dynamic Intelligence Telemetry */}
+      <InsightBadge
+        elementId="expiry_spoilage_risk"
+        variant="banner"
+        className="w-full"
+      />
 
       {/* Middle row: Multi-Column layout with customized pie ring, alerts & visual bars */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

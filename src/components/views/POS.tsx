@@ -3,7 +3,7 @@ import {
   Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, 
   Banknote, Receipt, Package, Loader2, CheckCircle2,
   Scan, Pause, RotateCcw, Smartphone, X, FileText,
-  Percent, Coins, UserCheck, AlertCircle, Sparkles,
+  Coins, UserCheck, AlertCircle, Sparkles,
   Keyboard, Users, UserPlus, Phone, Mail, Check,
   ChevronLeft, ChevronRight, ArrowRight, ArrowLeft, Printer,
   Store, Hash, Calendar, DollarSign
@@ -15,6 +15,7 @@ import { handleFirestoreError, OperationType } from '../../lib/firestoreUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { cn } from '../../lib/utils';
+import { InsightBadge } from '../common/InsightBadge';
 
 interface CartItem {
   id: string;
@@ -62,8 +63,7 @@ export function POS() {
   // Active Order Basket Modal/Drawer State
   const [showOrderBasketModal, setShowOrderBasketModal] = useState(false);
 
-  // Discount & Tender State
-  const [discountPercent, setDiscountPercent] = useState(0);
+  // Tender State
   const [cashTendered, setCashTendered] = useState<number | ''>('');
   const [mpesaCode, setMpesaCode] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState('');
@@ -99,14 +99,6 @@ export function POS() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scannerInputRef = useRef<HTMLInputElement>(null);
-  const fastPickRef = useRef<HTMLDivElement>(null);
-
-  const scrollFastPick = (direction: 'left' | 'right') => {
-    if (fastPickRef.current) {
-      const scrollAmount = direction === 'left' ? -280 : 280;
-      fastPickRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    }
-  };
 
   // Held Carts State
   const [heldCarts, setHeldCarts] = useState<any[]>(() => {
@@ -235,13 +227,6 @@ export function POS() {
     });
   }, [products, searchQuery, activeCategory]);
 
-  const quickAccessProducts = useMemo(() => {
-    return products
-      .filter(p => (p.quantity || 0) > 0)
-      .sort((a, b) => (b.unitsSold || 0) - (a.unitsSold || 0))
-      .slice(0, 12);
-  }, [products]);
-
   const addToCart = (product: any) => {
     const currentStock = typeof product.quantity === 'number' ? product.quantity : 0;
     if (currentStock <= 0) return;
@@ -302,8 +287,9 @@ export function POS() {
 
   // Cart Calculations
   const rawTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const discountAmount = Math.round((rawTotal * discountPercent) / 100);
-  const total = Math.max(0, rawTotal - discountAmount);
+  const discountAmount = 0;
+  const discountPercent = 0;
+  const total = rawTotal;
   const subtotal = Math.round(total / 1.16);
   const tax = total - subtotal;
 
@@ -632,7 +618,7 @@ export function POS() {
       <div className="max-w-[1700px] mx-auto h-full grid grid-cols-1 xl:grid-cols-[1fr_390px] 2xl:grid-cols-[1fr_430px] gap-4 sm:gap-5">
         
         {/* ========================================== */}
-        {/* LEFT PANEL: PRODUCT CATALOG & FAST PICK    */}
+        {/* LEFT PANEL: PRODUCT CATALOG                */}
         {/* ========================================== */}
         <div className="min-w-0 flex flex-col h-full min-h-[520px] xl:min-h-0 space-y-4 overflow-y-auto no-scrollbar text-left">
           
@@ -673,6 +659,13 @@ export function POS() {
               </div>
             </div>
           </div>
+
+          {/* Dynamic Intelligence Telemetry */}
+          <InsightBadge
+            elementId="sales_revenue_velocity"
+            variant="compact"
+            className="w-full"
+          />
 
           {/* Search Bar & Scan Button */}
           <div className="flex items-center gap-3 min-w-0 shrink-0">
@@ -755,95 +748,6 @@ export function POS() {
               );
             })}
           </div>
-
-          {/* Fast Pick Section */}
-          {quickAccessProducts.length > 0 && searchQuery === '' && activeCategory === 'All' && (
-            <div className="space-y-2.5 shrink-0">
-              <div className="flex items-center justify-between px-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-amber-500 text-sm">★</span>
-                  <h3 className="text-sm font-semibold text-[#1a1c20]">Fast pick items</h3>
-                  <span className="text-xs text-[#9096a0] font-normal">
-                    {quickAccessProducts.length} items
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => scrollFastPick('left')}
-                    className="w-7 h-7 bg-white hover:bg-[#f8f9fa] active:bg-[#e4e6e9] text-[#6b6f78] rounded-lg border border-[#e4e6e9] flex items-center justify-center transition-all shadow-[0_1px_3px_rgba(20,20,30,0.05)]"
-                    title="Scroll Left"
-                    aria-label="Scroll left"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => scrollFastPick('right')}
-                    className="w-7 h-7 bg-white hover:bg-[#f8f9fa] active:bg-[#e4e6e9] text-[#6b6f78] rounded-lg border border-[#e4e6e9] flex items-center justify-center transition-all shadow-[0_1px_3px_rgba(20,20,30,0.05)]"
-                    title="Scroll Right"
-                    aria-label="Scroll right"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div 
-                ref={fastPickRef}
-                onWheel={(e) => {
-                  if (fastPickRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-                    fastPickRef.current.scrollLeft += e.deltaY * 0.8;
-                  }
-                }}
-                className="flex gap-3 overflow-x-auto pb-1 scroll-smooth select-none focus:outline-none no-scrollbar"
-              >
-                {quickAccessProducts.map(product => {
-                  const isOutOfStock = (product.quantity || 0) <= 0;
-                  return (
-                    <div 
-                      key={product.id}
-                      onClick={() => !isOutOfStock && addToCart(product)}
-                      className={cn(
-                        "w-[150px] sm:w-[165px] p-3.5 rounded-[10px] border border-[#e4e6e9] text-left flex flex-col justify-between shrink-0 transition-all cursor-pointer min-h-[140px]",
-                        isOutOfStock 
-                          ? "bg-[#f4f5f6] opacity-80 cursor-not-allowed shadow-none" 
-                          : "bg-white shadow-[0_2px_8px_rgba(20,20,30,0.08)] hover:shadow-[0_4px_12px_rgba(20,20,30,0.12)] active:scale-[0.98]"
-                      )}
-                    >
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#9096a0] block">
-                          STOCK: {product.quantity || 0}
-                        </span>
-                        <h4 className={cn("text-sm font-medium leading-snug line-clamp-2 mt-1", isOutOfStock ? "text-[#9096a0] line-through" : "text-[#1a1c20]")}>
-                          {product.name}
-                        </h4>
-                      </div>
-
-                      <div className="mt-3 pt-2 flex items-center justify-between">
-                        <p className={cn("text-base sm:text-lg font-bold font-sans", isOutOfStock ? "text-[#9096a0]" : "text-[#1a1c20]")}>
-                          {currency} {getSellingPrice(product).toLocaleString()}
-                        </p>
-                        {!isOutOfStock && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              addToCart(product);
-                            }}
-                            className="w-7 h-7 rounded-full bg-gradient-to-b from-[#22b37a] to-[#189163] text-white flex items-center justify-center shadow-[0_2px_6px_rgba(26,138,95,0.3)] hover:scale-105 active:scale-95 transition-transform"
-                          >
-                            <Plus className="w-4 h-4 stroke-[2.5]" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Main Product Catalog Grid */}
           <div className="space-y-2.5 flex-1 pb-4">
@@ -1274,40 +1178,10 @@ export function POS() {
                     </div>
                   </div>
 
-                  {/* Discount Bar */}
-                  <div className="flex items-center justify-between p-3 bg-[#f8f9fa] rounded-2xl border border-[#e4e6e9]">
-                    <div className="flex items-center gap-2">
-                      <Percent className="w-4 h-4 text-[#1a8a5f]" />
-                      <span className="text-xs font-bold text-[#1a1c20]">Apply Discount</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {[0, 5, 10, 15].map(pct => (
-                        <button
-                          key={pct}
-                          type="button"
-                          onClick={() => setDiscountPercent(pct)}
-                          className={cn(
-                            "px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition-all border",
-                            discountPercent === pct 
-                              ? "bg-[#1a8a5f] text-white border-[#1a8a5f] shadow-2xs" 
-                              : "bg-white text-[#1a1c20] border-[#e4e6e9] hover:bg-[#f8f9fa]"
-                          )}
-                        >
-                          {pct}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   {/* Total Bar */}
                   <div className="p-4 bg-[#f8f9fa] border border-[#e4e6e9] rounded-2xl flex items-center justify-between">
                     <div>
                       <span className="text-[10px] font-bold text-[#9096a0] uppercase tracking-wider block">Total Amount Due</span>
-                      {discountAmount > 0 && (
-                        <span className="text-[10px] text-[#1a8a5f] font-bold">
-                          Includes {discountPercent}% discount (-{currency}{discountAmount.toLocaleString()})
-                        </span>
-                      )}
                     </div>
                     <span className="text-xl font-bold font-mono text-[#1a8a5f]">
                       {currency} {total.toLocaleString()}

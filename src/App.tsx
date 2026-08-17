@@ -323,7 +323,7 @@ function AppContent() {
       case 'alerts': return <Alerts />;
       case 'help': return <Help />;
       case 'settings': return <SettingsView />;
-      case 'inventory_pro_chat': return <InventoryProChat />;
+      case 'inventory_pro_chat': return <InventoryProChat onNavigate={setCurrentView} />;
       default: return <Dashboard onNavigate={setCurrentView} />;
     }
   };
@@ -362,7 +362,7 @@ function AppContent() {
       </div>
 
       <BottomNav currentView={currentView} onViewChange={setCurrentView} />
-      {currentView === 'dashboard' && <InventoryProFloatingWidget />}
+      {currentView !== 'inventory_pro_chat' && <InventoryProFloatingWidget onNavigate={setCurrentView} />}
     </div>
   );
 }

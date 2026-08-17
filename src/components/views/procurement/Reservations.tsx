@@ -495,6 +495,13 @@ export function Reservations({ onNavigate }: ReservationsProps) {
         </div>
       </div>
 
+      {/* Dynamic Intelligence Telemetry */}
+      <InsightBadge
+        elementId="procurement_reservations_health"
+        variant="banner"
+        className="w-full"
+      />
+
       {/* Main Content Container */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-left">
         
