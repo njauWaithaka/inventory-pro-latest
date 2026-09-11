@@ -31,7 +31,7 @@ export function MROIssues() {
     if (!profile?.companyId) return;
     const q = collection(db, `companies/${profile.companyId}/mro_issues`);
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setIssues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MROIssue)));
+      setIssues(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as MROIssue)));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'mro_issues');
@@ -40,7 +40,7 @@ export function MROIssues() {
 
     const productsPath = `companies/${profile.companyId}/products`;
     const unsubscribeProducts = onSnapshot(collection(db, productsPath), (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      setProducts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Product)));
     });
 
     return () => {

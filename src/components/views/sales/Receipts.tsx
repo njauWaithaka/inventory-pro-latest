@@ -45,7 +45,7 @@ export function Receipts() {
     const q = query(collection(db, path), orderBy('timestamp', 'desc'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setReceipts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setReceipts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, path);

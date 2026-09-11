@@ -61,7 +61,7 @@ export function Invoices({ filterType }: { filterType?: 'standard' | 'proforma' 
     }
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setInvoices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setInvoices(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, path);
@@ -75,12 +75,12 @@ export function Invoices({ filterType }: { filterType?: 'standard' | 'proforma' 
     if (isNewInvoiceOpen && profile?.companyId) {
       const q = collection(db, `companies/${profile.companyId}/products`);
       getDocs(q).then(snapshot => {
-        setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setProducts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       });
 
       const custQ = collection(db, `companies/${profile.companyId}/customers`);
       getDocs(custQ).then(snapshot => {
-        setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setCustomers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       });
     }
   }, [isNewInvoiceOpen, profile?.companyId]);
@@ -259,7 +259,7 @@ export function Invoices({ filterType }: { filterType?: 'standard' | 'proforma' 
         // Fetch current product state
         const q = collection(db, `companies/${profile.companyId}/products`);
         const snapshot = await getDocs(q);
-        const productsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const productsList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
         const product = productsList.find(p => p.id === item.productId);
         const beforeQty = (product as any)?.quantity || 0;
         const finalQty = beforeQty - item.quantity;

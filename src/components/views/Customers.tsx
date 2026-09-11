@@ -94,7 +94,7 @@ export function Customers() {
     const q = collection(db, path);
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setCustomers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, path);

@@ -63,7 +63,7 @@ function AppContent() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  const { user, loading: authLoading, loginWithEmail, registerWithEmail, loginDemo, connectionError } = useAuth();
+  const { user, loading: authLoading, loginWithGoogle, loginWithEmail, registerWithEmail, connectionError } = useAuth();
   const { profile, company, loading: settingsLoading, createCompany } = useSettings();
   const [companyName, setCompanyName] = useState('');
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
@@ -83,10 +83,10 @@ function AppContent() {
 
     try {
       if (!email.trim() || !password.trim()) {
-        throw new Error("Please fill in all layout credentials.");
+        throw new Error("Please fill in your email address and password.");
       }
       if (authMode === 'signup' && !fullName.trim()) {
-        throw new Error("Please enter your full name to set up the registry profile.");
+        throw new Error("Please enter your full name for your company profile.");
       }
 
       if (authMode === 'signin') {
@@ -95,51 +95,25 @@ function AppContent() {
         await registerWithEmail(email.trim(), password, fullName.trim());
       }
     } catch (err: any) {
-      setAuthError(err?.message || "Authentication transaction failed.");
+      setAuthError(err?.message || "Authentication failed.");
     } finally {
       setIsSubmittingAuth(false);
     }
   };
 
-  const handleDemoSignIn = async () => {
+  const handleGoogleSignIn = async () => {
     setAuthError(null);
     setIsSubmittingAuth(true);
     try {
-      await loginDemo();
+      await loginWithGoogle();
     } catch (err: any) {
-      setAuthError(err?.message || "Could not spin up demo session.");
+      setAuthError(err?.message || "Could not sign in with Google account.");
     } finally {
       setIsSubmittingAuth(false);
     }
   };
 
-  if (connectionError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-brand-bg p-4 sm:p-6">
-        <div className="max-w-md w-full bg-white p-6 sm:p-8 rounded-3xl border border-rose-100 shadow-2xl text-center">
-          <div className="w-12 h-12 sm:w-16 sm:h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4 sm:mb-6">
-            <WifiOff className="w-6 h-6 sm:w-8 sm:h-8 text-rose-500" />
-          </div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">Connection Issue</h2>
-          <p className="text-slate-500 text-xs sm:text-sm mb-6">{connectionError}</p>
-          <div className="p-3 sm:p-4 bg-slate-50 rounded-xl text-left mb-6">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Troubleshooting</p>
-            <ul className="text-[10px] sm:text-xs text-slate-600 space-y-1.5 list-disc pl-4">
-              <li>Ensure the Firestore database was created in your Firebase Console.</li>
-              <li>Check your internet connection.</li>
-              <li>If the issue persists, try running the Firebase Setup again in AI Studio.</li>
-            </ul>
-          </div>
-          <button 
-            onClick={() => window.location.reload()}
-            className="w-full h-11 sm:h-12 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all text-xs sm:text-sm"
-          >
-            Retry Connection
-          </button>
-        </div>
-      </div>
-    );
-  }
+
 
   if (authLoading || settingsLoading) {
     return (
@@ -152,57 +126,157 @@ function AppContent() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-brand-bg p-4 relative overflow-hidden">
-        {/* Abstract shapes for background */}
+        {/* Subtle decorative background shapes */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-50/50 blur-3xl animate-pulse" />
-           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-50/50 blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-50/50 blur-3xl" />
+           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-50/50 blur-3xl" />
         </div>
 
         <motion.div 
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-white p-8 sm:p-10 rounded-[2rem] border border-slate-200 shadow-2xl relative z-10"
+          className="max-w-md w-full bg-white p-7 sm:p-9 rounded-[2rem] border border-slate-200 shadow-2xl relative z-10"
         >
           <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-[#10b981] rounded-2xl flex items-center justify-center shadow-xl shadow-[#10b981]/20 mb-6">
-              <BarChart3 className="w-8 h-8 text-white" />
+            <div className="w-14 h-14 bg-[#10b981] rounded-2xl flex items-center justify-center shadow-lg shadow-[#10b981]/20 mb-4">
+              <BarChart3 className="w-7 h-7 text-white" />
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-tight">InventoryPro</h1>
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px] mt-1.5">Smart Decisions • Cloud ERP</p>
-            
-            <div className="w-full h-px bg-slate-100 my-8" />
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">InventoryPro</h1>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Production Cloud ERP</p>
+            </div>
 
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Instant Workspace Sandbox</h2>
-            <p className="text-slate-500 text-xs sm:text-sm mb-8 leading-relaxed">
-              Explore professional logistics workflows, warehousing, spend analysis, real-time POS, and automated tracking indices instantly inside your sandboxed ERP environment.
-            </p>
+            <div className="w-full h-px bg-slate-100 my-6" />
 
             {authError && (
-              <div className="w-full flex items-start gap-2 bg-rose-50 text-rose-600 border border-rose-100 p-4 rounded-xl text-xs font-bold text-left mb-6">
+              <div className="w-full flex items-start gap-2 bg-rose-50 text-rose-600 border border-rose-100 p-3.5 rounded-xl text-xs font-semibold text-left mb-4 animate-in fade-in duration-200">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{authError}</span>
               </div>
             )}
 
+            {/* One-Click Google Auth */}
             <button
               type="button"
-              onClick={handleDemoSignIn}
+              onClick={handleGoogleSignIn}
               disabled={isSubmittingAuth}
-              className="w-full h-13 rounded-2xl bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-widest transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-3 shadow-lg shadow-slate-200 disabled:opacity-50"
+              className="w-full h-12 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs tracking-wide transition-all hover:border-slate-300 flex items-center justify-center gap-3 shadow-sm disabled:opacity-50"
             >
               {isSubmittingAuth ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin text-slate-600" />
               ) : (
                 <>
-                  <LogIn className="w-4 h-4" />
-                  Enter Guest Sandbox
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                  </svg>
+                  <span>Sign in with Google</span>
                 </>
               )}
             </button>
 
-            <p className="mt-8 text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-relaxed">
-              No registration required. Auto-spins cloud databases securely.
-            </p>
+            <div className="w-full flex items-center gap-3 my-5">
+              <div className="flex-1 h-px bg-slate-100" />
+              <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">or with email</span>
+              <div className="flex-1 h-px bg-slate-100" />
+            </div>
+
+            {/* Email / Password Sign In or Sign Up Form */}
+            <form onSubmit={handleAuthSubmit} className="w-full space-y-3.5">
+              {/* Tab Selector */}
+              <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl mb-4 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('signin')}
+                  className={cn(
+                    "py-2 rounded-lg transition-all",
+                    authMode === 'signin' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  )}
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('signup')}
+                  className={cn(
+                    "py-2 rounded-lg transition-all",
+                    authMode === 'signup' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  )}
+                >
+                  Register
+                </button>
+              </div>
+
+              {authMode === 'signup' && (
+                <div className="text-left space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
+                  <div className="relative">
+                    <UserIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Jane Doe"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full h-11 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:bg-white focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="text-left space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="name@company.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full h-11 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:bg-white focus:border-blue-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="text-left space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Password</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full h-11 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none focus:bg-white focus:border-blue-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmittingAuth}
+                className="w-full h-12 mt-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md shadow-slate-900/10 disabled:opacity-50"
+              >
+                {isSubmittingAuth ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    {authMode === 'signin' ? 'Sign In to Workspace' : 'Create Account'}
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-semibold text-slate-400">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Real-Time Cloud Firestore • Production Ready</span>
+            </div>
           </div>
         </motion.div>
       </div>
@@ -320,8 +394,8 @@ function AppContent() {
       case 'expiry_tracking': return <ExpiryTracking />;
       case 'profit_tracking': return <ProfitTracking />;
       case 'warranties': return <Warranties />;
-      case 'alerts': return <Alerts />;
-      case 'help': return <Help />;
+      case 'alerts': return <Alerts onNavigate={setCurrentView} />;
+      case 'help': return <Help onNavigate={setCurrentView} />;
       case 'settings': return <SettingsView />;
       case 'inventory_pro_chat': return <InventoryProChat onNavigate={setCurrentView} />;
       default: return <Dashboard onNavigate={setCurrentView} />;
@@ -344,7 +418,7 @@ function AppContent() {
         isSidebarCollapsed ? "md:pl-[64px]" : "md:pl-[260px]",
         "pl-0"
       )}>
-        <Navbar onMenuClick={() => setIsSidebarOpen(true)} currentView={currentView} />
+        <Navbar onMenuClick={() => setIsSidebarOpen(true)} currentView={currentView} onNavigate={setCurrentView} />
         
         <main className="flex-1 px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 lg:px-8 lg:pt-4 lg:pb-8 xl:px-10 xl:pt-4 xl:pb-10 mb-20 lg:mb-0 w-full mx-auto min-w-0">
           <AnimatePresence mode="wait">
@@ -377,14 +451,17 @@ export default function App() {
   );
 }
 
-const SettingsPlaceholder = ({ title, description, icon: Icon }: { title: string, description: string, icon: any }) => (
+const SettingsPlaceholder = ({ title, description, icon: Icon, onExplore }: { title: string, description: string, icon: any, onExplore?: () => void }) => (
     <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-12 bg-white rounded-2xl border border-slate-200 border-dashed">
       <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 border border-slate-100 shadow-sm">
         <Icon className="w-10 h-10 text-slate-400" />
       </div>
       <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">{title}</h2>
       <p className="text-slate-500 font-medium max-w-sm mt-2">{description}</p>
-      <button className="mt-8 px-6 h-11 bg-[#0f172a] text-white rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-slate-800 transition-all">
+      <button 
+        onClick={onExplore}
+        className="mt-8 px-6 h-11 bg-[#0f172a] text-white rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-slate-800 transition-all cursor-pointer"
+      >
         Explore Module
       </button>
     </div>

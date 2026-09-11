@@ -77,7 +77,7 @@ export function BOM() {
     // Real-time Products snapshot
     const qProducts = collection(db, `companies/${profile.companyId}/products`);
     const unsubProducts = onSnapshot(qProducts, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setProducts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'products');
     });
@@ -85,7 +85,7 @@ export function BOM() {
     // Real-time BOMs snapshot
     const qBoms = collection(db, `companies/${profile.companyId}/boms`);
     const unsubBoms = onSnapshot(qBoms, (snapshot) => {
-      setBoms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BOMData)));
+      setBoms(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BOMData)));
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'boms');
     });
@@ -93,7 +93,7 @@ export function BOM() {
     // Real-time Production orders snapshot
     const qOrders = collection(db, `companies/${profile.companyId}/production_orders`);
     const unsubOrders = onSnapshot(qOrders, (snapshot) => {
-      setProductionOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setProductionOrders(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'production_orders');

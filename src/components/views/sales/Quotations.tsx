@@ -142,7 +142,7 @@ export function Quotations() {
     const q = query(collection(db, path), orderBy('createdAt', 'desc'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setQuotations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setQuotations(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, path);
@@ -156,12 +156,12 @@ export function Quotations() {
     if (isNewQuotationOpen && profile?.companyId) {
       const q = collection(db, `companies/${profile.companyId}/products`);
       getDocs(q).then(snapshot => {
-        setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setProducts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       });
 
       const custQ = collection(db, `companies/${profile.companyId}/customers`);
       getDocs(custQ).then(snapshot => {
-        setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setCustomers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       });
 
       // Pre-fill fields with user/company context
@@ -471,7 +471,7 @@ export function Quotations() {
       if (type === 'standard') {
         const productsRef = collection(db, `companies/${profile.companyId}/products`);
         const productsSnap = await getDocs(productsRef);
-        const productsList = productsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+        const productsList = productsSnap.docs.map(doc => ({ ...doc.data() as any, id: doc.id }));
 
         for (const item of quotation.items) {
           const product = productsList.find(p => p.id === item.productId);

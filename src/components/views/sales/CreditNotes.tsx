@@ -46,7 +46,7 @@ export function CreditNotes() {
     // Subscribe to credit notes
     const path = `companies/${profile.companyId}/credit_notes`;
     const unsubscribe = onSnapshot(collection(db, path), (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const docs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       setCredits(docs);
       setLoading(false);
     }, (error) => {
@@ -57,13 +57,13 @@ export function CreditNotes() {
     // Subscribe to products
     const productsPath = `companies/${profile.companyId}/products`;
     const unsubscribeProducts = onSnapshot(collection(db, productsPath), (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setProducts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
 
     // Subscribe to invoices
     const invoicesPath = `companies/${profile.companyId}/invoices`;
     const unsubscribeInvoices = onSnapshot(collection(db, invoicesPath), (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const docs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       // Filter only standard, active invoices that have items to return
       const filtered = docs.filter((inv: any) => inv.status !== 'proforma' && inv.type !== 'proforma');
       setInvoices(filtered);

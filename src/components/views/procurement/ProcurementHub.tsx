@@ -34,7 +34,7 @@ export function ProcurementHub({ onNavigate }: ProcurementHubProps) {
     const unsubscribePOs = onSnapshot(collection(db, poPath), (snapshot) => {
       const orders = snapshot.docs.map(doc => {
         const data = doc.data();
-        return { id: doc.id, ...data } as PurchaseOrder;
+        return { ...data, id: doc.id } as PurchaseOrder;
       });
       setPurchaseOrders(orders);
       setLoading(false);
@@ -45,7 +45,7 @@ export function ProcurementHub({ onNavigate }: ProcurementHubProps) {
 
     const resPath = `companies/${profile.companyId}/reservations`;
     const unsubscribeRes = onSnapshot(collection(db, resPath), (snapshot) => {
-      const resList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockReservation));
+      const resList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as StockReservation));
       setReservations(resList);
     }, (err) => {
       console.error("ProcurementHub.tsx reservations listener error:", err);
@@ -53,7 +53,7 @@ export function ProcurementHub({ onNavigate }: ProcurementHubProps) {
 
     const suppliersPath = `companies/${profile.companyId}/suppliers`;
     const unsubscribeSuppliers = onSnapshot(collection(db, suppliersPath), (snapshot) => {
-      const sups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const sups = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       setSuppliers(sups);
     }, (err) => {
       console.error("ProcurementHub.tsx suppliers listener error:", err);

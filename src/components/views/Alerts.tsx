@@ -12,7 +12,11 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { cn } from '../../lib/utils';
 import { InsightBadge } from '../common/InsightBadge';
 
-export function Alerts() {
+interface AlertsProps {
+  onNavigate?: (view: string) => void;
+}
+
+export function Alerts({ onNavigate }: AlertsProps) {
   const { user } = useAuth();
   const { profile } = useSettings();
   const [filter, setFilter] = useState('all');
@@ -20,11 +24,45 @@ export function Alerts() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
+  const handleTakeAction = async (alert: any) => {
+    if (alert.actionUrl && onNavigate) {
+      onNavigate(alert.actionUrl);
+      return;
+    }
+    const type = (alert.type || alert.category || '').toLowerCase();
+    const title = (alert.title || '').toLowerCase();
+    
+    if (onNavigate) {
+      if (type.includes('expiry') || title.includes('expir')) {
+        onNavigate('expiry_tracking');
+        return;
+      }
+      if (type.includes('reorder') || title.includes('reorder') || title.includes('low stock')) {
+        onNavigate('purchase_orders');
+        return;
+      }
+      if (type.includes('dead') || type.includes('discount') || title.includes('slow')) {
+        onNavigate('pos');
+        return;
+      }
+      if (type.includes('margin') || title.includes('profit')) {
+        onNavigate('profit_tracking');
+        return;
+      }
+      if (type.includes('turnover') || title.includes('velocity')) {
+        onNavigate('analytics');
+        return;
+      }
+    }
+    // Default fallback: mark resolved
+    await updateAlertStatus(alert.id, 'resolved');
+  };
+
   useEffect(() => {
     if (!profile?.companyId) return;
     const q = collection(db, `companies/${profile.companyId}/inventory_alerts`);
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setAlerts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setAlerts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     });
 
@@ -60,7 +98,7 @@ export function Alerts() {
       activeAlerts.forEach(alert => {
         if (alert.status !== 'read') {
           const alertRef = doc(db, `companies/${profile.companyId}/inventory_alerts`, alert.id);
-          batch.update(alertRef, { status: 'read' });
+          batch.set(alertRef, { status: 'read' }, { merge: true });
         }
       });
       await batch.commit();
@@ -236,7 +274,10 @@ export function Alerts() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
-                  <button className="h-10 px-6 rounded-xl bg-[#0f172a] text-white text-xs font-black shadow-sm hover:bg-slate-800 transition-all">
+                  <button 
+                    onClick={() => handleTakeAction(alert)}
+                    className="h-10 px-6 rounded-xl bg-[#0f172a] text-white text-xs font-black shadow-sm hover:bg-slate-800 transition-all cursor-pointer active:scale-95"
+                  >
                     {alert.actionLabel || 'Take Action'}
                   </button>
                   <button 

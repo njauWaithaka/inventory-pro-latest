@@ -34,26 +34,26 @@ export function GRN() {
     // Fetch GRNs
     const grnPath = `companies/${profile.companyId}/grns`;
     const unsubscribeGrns = onSnapshot(collection(db, grnPath), (snapshot) => {
-      setGrns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GoodReceiptNote)));
+      setGrns(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GoodReceiptNote)));
       setLoading(false);
     });
 
     // Fetch POs (only approved/shipped for GRN creation)
     const poPath = `companies/${profile.companyId}/purchaseOrders`;
     const unsubscribePOs = onSnapshot(collection(db, poPath), (snapshot) => {
-      setPurchaseOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseOrder)));
+      setPurchaseOrders(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PurchaseOrder)));
     });
 
     // Fetch Products
     const productsPath = `companies/${profile.companyId}/products`;
     const unsubscribeProducts = onSnapshot(collection(db, productsPath), (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      setProducts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Product)));
     });
 
     // Fetch Suppliers
     const suppliersPath = `companies/${profile.companyId}/suppliers`;
     const unsubscribeSuppliers = onSnapshot(collection(db, suppliersPath), (snapshot) => {
-      setSuppliers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setSuppliers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
 
     return () => {

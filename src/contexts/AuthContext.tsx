@@ -1,6 +1,16 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  updateProfile as updateFirebaseProfile,
+  signOut,
+  User as FirebaseUser
+} from 'firebase/auth';
 import { doc, getDocFromServer } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 export interface User {
@@ -14,23 +24,13 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   connectionError: string | null;
+  loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, name: string) => Promise<void>;
-  loginDemo: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const LOCAL_USER_KEY = 'inventory_pro_local_user';
-const USERS_REGISTRY_KEY = 'inventory_pro_local_users_registry';
-
-interface RegisteredUser {
-  uid: string;
-  email: string;
-  name: string;
-  passwordHash: string; // stored directly in plain text/simulation for sandbox purposes 
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -43,60 +43,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await getDocFromServer(doc(db, 'test', 'connection'));
         setConnectionError(null);
       } catch (error) {
-        console.error("Firestore connection test failed.");
-        if (error instanceof Error) {
-          if (error.message.includes('the client is offline') || error.message.includes('within 10 seconds')) {
-            setConnectionError("Could not reach Firestore. Please check if your database instance '" + firebaseConfig.firestoreDatabaseId + "' is created and active in the Firebase Console.");
-          } else if (!error.message.includes('Missing or insufficient permissions')) {
-            setConnectionError(error.message);
-          }
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
         } else {
-          setConnectionError(String(error));
+          console.warn("Firestore connection check notice:", error);
         }
+        // Do not block UI or prevent app operation; Firestore manages offline caching and automatic reconnects
+        setConnectionError(null);
       }
     }
 
     testConnection();
 
-    // Check localStorage for active session
-    try {
-      const storedUser = localStorage.getItem(LOCAL_USER_KEY);
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+    // Listen to real-time Firebase Auth state
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        setUser({
+          uid: firebaseUser.uid,
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          email: firebaseUser.email,
+          photoURL: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.displayName || firebaseUser.email || 'User')}`,
+        });
+      } else {
+        setUser(null);
       }
-    } catch (e) {
-      console.warn("Could not reload local user session from cache: ", e);
-    }
-    setLoading(false);
+      setLoading(false);
+    }, (error) => {
+      console.error("Firebase auth state listener error:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribeAuth();
   }, []);
+
+  const loginWithGoogle = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      console.error("Google sign-in failed:", err);
+      throw new Error(err?.message || "Google authentication failed.");
+    }
+  };
 
   const loginWithEmail = async (email: string, password: string) => {
     try {
       const emailTrim = email.trim().toLowerCase();
-      const registryString = localStorage.getItem(USERS_REGISTRY_KEY) || '[]';
-      const registry: RegisteredUser[] = JSON.parse(registryString);
-
-      const found = registry.find(u => u.email === emailTrim);
-      if (!found) {
-        throw new Error("No account registered with that email address. Please sign up or continue as Guest.");
-      }
-
-      if (found.passwordHash !== password) {
-        throw new Error("Incorrect password. Please try again.");
-      }
-
-      const activeUser: User = {
-        uid: found.uid,
-        displayName: found.name,
-        email: found.email,
-        photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(found.name)}`,
-      };
-
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(activeUser));
-      setUser(activeUser);
+      await signInWithEmailAndPassword(auth, emailTrim, password);
     } catch (err: any) {
-      console.error("Local email login failed", err);
-      throw new Error(err.message || "Failed to sign in.");
+      console.error("Firebase email login failed:", err);
+      let message = "Failed to sign in.";
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        message = "Invalid email or password. Please verify your credentials.";
+      } else if (err.code === 'auth/invalid-email') {
+        message = "Please enter a valid email address.";
+      } else if (err.code === 'auth/too-many-requests') {
+        message = "Too many failed attempts. Please try again later or sign in with Google.";
+      } else if (err.message) {
+        message = err.message;
+      }
+      throw new Error(message);
     }
   };
 
@@ -104,76 +111,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const emailTrim = email.trim().toLowerCase();
       if (password.length < 6) {
-        throw new Error("Password should be at least 6 characters long.");
+        throw new Error("Password must be at least 6 characters long.");
       }
 
-      const registryString = localStorage.getItem(USERS_REGISTRY_KEY) || '[]';
-      const registry: RegisteredUser[] = JSON.parse(registryString);
-
-      const exists = registry.some(u => u.email === emailTrim);
-      if (exists) {
-        throw new Error("This email address is already registered on this device.");
+      const credential = await createUserWithEmailAndPassword(auth, emailTrim, password);
+      if (name && credential.user) {
+        await updateFirebaseProfile(credential.user, { displayName: name.trim() });
       }
-
-      const newUid = 'u_' + Math.random().toString(36).substr(2, 9);
-      const newUserRecord: RegisteredUser = {
-        uid: newUid,
-        email: emailTrim,
-        name: name.trim(),
-        passwordHash: password
-      };
-
-      registry.push(newUserRecord);
-      localStorage.setItem(USERS_REGISTRY_KEY, JSON.stringify(registry));
-
-      const activeUser: User = {
-        uid: newUid,
-        displayName: newUserRecord.name,
-        email: newUserRecord.email,
-        photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(newUserRecord.name)}`,
-      };
-
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(activeUser));
-      setUser(activeUser);
     } catch (err: any) {
-      console.error("Local email registration failed", err);
-      throw new Error(err.message || "Failed to create account.");
-    }
-  };
-
-  const loginDemo = async () => {
-    try {
-      // Create a stable guest session tied to this browser/device, or load it
-      let activeUser: User;
-      const storedUser = localStorage.getItem(LOCAL_USER_KEY);
-      
-      if (storedUser) {
-        activeUser = JSON.parse(storedUser);
-      } else {
-        const guestId = 'guest_' + Math.random().toString(36).substr(2, 9);
-        activeUser = {
-          uid: guestId,
-          displayName: "Demo User",
-          email: "demo@inventorypro.co",
-          photoURL: "https://api.dicebear.com/7.x/initials/svg?seed=DemoUser"
-        };
-        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(activeUser));
+      console.error("Firebase registration failed:", err);
+      let message = "Failed to create account.";
+      if (err.code === 'auth/email-already-in-use') {
+        message = "An account with this email address already exists. Please sign in instead.";
+      } else if (err.code === 'auth/weak-password') {
+        message = "Password is too weak. Please use at least 6 characters.";
+      } else if (err.code === 'auth/invalid-email') {
+        message = "Please provide a valid email address.";
+      } else if (err.message) {
+        message = err.message;
       }
-      
-      setUser(activeUser);
-    } catch (err: any) {
-      console.error("Guest login failed", err);
-      throw new Error(err?.message || "Could not launch Guest Sandbox.");
+      throw new Error(message);
     }
   };
 
   const logout = async () => {
-    localStorage.removeItem(LOCAL_USER_KEY);
-    setUser(null);
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (err) {
+      console.error("Firebase logout error:", err);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, connectionError, loginWithEmail, registerWithEmail, loginDemo, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      connectionError, 
+      loginWithGoogle,
+      loginWithEmail, 
+      registerWithEmail, 
+      logout 
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -186,4 +165,5 @@ export function useAuth() {
   }
   return context;
 }
+
 

@@ -22,11 +22,11 @@ export function SupplierAnalytics() {
     }
 
     const unsubSuppliers = onSnapshot(collection(db, `companies/${profile.companyId}/suppliers`), (snap) => {
-      setSuppliers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setSuppliers(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (err) => console.error("Error loading suppliers:", err));
 
     const unsubGrns = onSnapshot(collection(db, `companies/${profile.companyId}/grns`), (snap) => {
-      setGrns(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setGrns(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (err) => console.error("Error loading grns:", err));
 
     // Wait slightly to set loading false

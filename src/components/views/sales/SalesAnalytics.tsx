@@ -73,10 +73,10 @@ export function SalesAnalytics() {
 
     const basePath = `companies/${profile.companyId}`;
     const unsubInvoices = onSnapshot(collection(db, `${basePath}/invoices`), (snap) => {
-      setInvoices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setInvoices(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
     const unsubProducts = onSnapshot(collection(db, `${basePath}/products`), (snap) => {
-      setProducts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setProducts(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
 
     const timer = setTimeout(() => setLoading(false), 500);

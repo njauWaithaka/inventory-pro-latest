@@ -34,7 +34,7 @@ export function DeliveryNotes() {
     const q = query(collection(db, path), orderBy('createdAt', 'desc'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setDeliveryNotes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setDeliveryNotes(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, path);

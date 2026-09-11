@@ -75,7 +75,7 @@ export function PurchaseOrders() {
       const orders = snapshot.docs.map(doc => {
         const data = doc.data();
         console.log("PurchaseOrders.tsx found PO doc in snapshot:", doc.id, data);
-        return { id: doc.id, ...data } as PurchaseOrder;
+        return { ...data, id: doc.id } as PurchaseOrder;
       });
       console.log("PurchaseOrders.tsx final state array to set:", orders);
       setPurchaseOrders(orders);
@@ -88,7 +88,7 @@ export function PurchaseOrders() {
     const productsPath = `companies/${profile.companyId}/products`;
     console.log("PurchaseOrders.tsx useEffect: Subscribing to products path:", productsPath);
     const unsubscribeProducts = onSnapshot(collection(db, productsPath), (snapshot) => {
-      const prods = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      const prods = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Product));
       console.log("PurchaseOrders.tsx products snapshot update. Product count:", prods.length);
       setProducts(prods);
     }, (err) => {
@@ -98,7 +98,7 @@ export function PurchaseOrders() {
     const suppliersPath = `companies/${profile.companyId}/suppliers`;
     console.log("PurchaseOrders.tsx useEffect: Subscribing to suppliers path:", suppliersPath);
     const unsubscribeSuppliers = onSnapshot(collection(db, suppliersPath), (snapshot) => {
-      const sups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const sups = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       console.log("PurchaseOrders.tsx suppliers snapshot update. Supplier count:", sups.length);
       setSuppliers(sups);
     }, (err) => {
@@ -123,52 +123,6 @@ export function PurchaseOrders() {
     if (!dateStr) return '';
     const d = new Date(dateStr);
     return isNaN(d.getTime()) ? '' : d.toLocaleDateString();
-  };
-
-  const handleAutoSeed = async () => {
-    if (!profile?.companyId) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      // 1. Seed some suppliers
-      const suppliersPath = `companies/${profile.companyId}/suppliers`;
-      const demoSuppliers = [
-        { id: `sup_1`, name: 'TechSource Distributors', email: 'sales@techsource.com', phone: '+1 555 7010', address: '500 Supply Rd', reliability: '91.3/100', payable: 0, status: 'Excellent' },
-        { id: `sup_2`, name: 'Pacific Components', email: 'ap@pacificcomp.com', phone: '+1 555 7020', address: '12 Harbor Ave', reliability: '85/100', payable: 0, status: 'Good' },
-        { id: `sup_3`, name: 'BeanWorld Roasters', email: 'orders@beanworld.com', phone: '+1 555 7030', address: '5 Roastery Ln', reliability: '88/100', payable: 0, status: 'Good' }
-      ];
-      for (const s of demoSuppliers) {
-        await setDoc(doc(db, suppliersPath, s.id), {
-          ...s,
-          createdAt: new Date().toISOString()
-        });
-      }
-
-      // 2. Seed some products
-      const productsPath = `companies/${profile.companyId}/products`;
-      const demoProducts = [
-        { id: `prod_1`, name: 'Industrial Nitrogen Pack', sku: 'NIT-IND-01', quantity: 150, value: 4500, buyingPrice: 30, sellingPrice: 50, uom: 'kg', status: 'In Stock' },
-        { id: `prod_2`, name: 'Biodegradable Packaging Bag', sku: 'PKG-BIO-05', quantity: 1000, value: 500, buyingPrice: 0.5, sellingPrice: 1.2, uom: 'pcs', status: 'In Stock' },
-        { id: `prod_3`, name: 'Heavy Duty Product Labels', sku: 'LBL-HD-12', quantity: 5000, value: 150, buyingPrice: 0.03, sellingPrice: 0.1, uom: 'pcs', status: 'In Stock' }
-      ];
-      for (const p of demoProducts) {
-        await setDoc(doc(db, productsPath, p.id), {
-          ...p,
-          createdAt: new Date().toISOString()
-        });
-      }
-      
-      // Auto select the first supplier to make it easy
-      setSupplierId('sup_1');
-      // Add one default item
-      setItems([{ productId: 'prod_1', quantity: 10, unitPrice: 30, receivedQuantity: 0 }]);
-      setError(null);
-    } catch (err: any) {
-      console.error("Auto seeding failed", err);
-      setError("Failed to auto-seed demo data. Please try creating suppliers and products manually.");
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const addItem = () => {
@@ -543,25 +497,17 @@ export function PurchaseOrders() {
                   </div>
                 )}
                 
-                {suppliers.length === 0 && products.length === 0 && (
-                  <div className="p-6 border border-amber-100 bg-amber-50/50 rounded-2xl text-left space-y-3 animate-in fade-in duration-300">
+                {suppliers.length === 0 && (
+                  <div className="p-4 border border-blue-100 bg-blue-50/50 rounded-2xl text-left space-y-2 animate-in fade-in duration-300">
                     <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                       <div>
-                        <h4 className="font-extrabold text-amber-900 text-xs">No Data Seeded Yet</h4>
-                        <p className="text-[11px] text-amber-700 mt-1 leading-relaxed">
-                          You can click the button below to seed demo suppliers and products, or simply use the inline creation features below to add them directly.
+                        <h4 className="font-extrabold text-blue-900 text-xs">No Suppliers Found</h4>
+                        <p className="text-[11px] text-blue-700 mt-0.5 leading-relaxed">
+                          You can quickly register a new supplier in real time using the "+ New Supplier" button below.
                         </p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAutoSeed}
-                      disabled={submitting}
-                      className="px-4 h-9 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 disabled:opacity-50 transition-all"
-                    >
-                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Auto-Seed Demo Setup"}
-                    </button>
                   </div>
                 )}
 

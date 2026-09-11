@@ -119,15 +119,15 @@ export function ProductionOrders({ initialTab }: { initialTab?: string }) {
     const companyPath = `companies/${profile.companyId}`;
 
     const unsubProducts = onSnapshot(collection(db, `${companyPath}/products`), (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setProducts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'products'));
 
     const unsubBoms = onSnapshot(collection(db, `${companyPath}/boms`), (snapshot) => {
-      setBoms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BOMData)));
+      setBoms(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BOMData)));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'boms'));
 
     const unsubOrders = onSnapshot(collection(db, `${companyPath}/production_orders`), (snapshot) => {
-      setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProductionOrder)));
+      setOrders(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as ProductionOrder)));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'production_orders');
@@ -135,23 +135,23 @@ export function ProductionOrders({ initialTab }: { initialTab?: string }) {
     });
 
     const unsubPlans = onSnapshot(collection(db, `${companyPath}/production_plans`), (snapshot) => {
-      setPlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setPlans(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'production_plans'));
 
     const unsubReqs = onSnapshot(collection(db, `${companyPath}/material_requisitions`), (snapshot) => {
-      setRequisitions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setRequisitions(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'material_requisitions'));
 
     const unsubIssues = onSnapshot(collection(db, `${companyPath}/material_issues`), (snapshot) => {
-      setIssues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setIssues(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'material_issues'));
 
     const unsubQc = onSnapshot(collection(db, `${companyPath}/qc_logs`), (snapshot) => {
-      setQcLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setQcLogs(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'qc_logs'));
 
     const unsubOutputs = onSnapshot(collection(db, `${companyPath}/production_outputs`), (snapshot) => {
-      setOutputs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setOutputs(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'production_outputs'));
 
     return () => {

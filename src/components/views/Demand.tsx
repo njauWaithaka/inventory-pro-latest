@@ -31,8 +31,6 @@ export function Demand() {
   const [datePreset, setDatePreset] = useState<'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom' | 'all'>('month');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
-  const [branchFilter, setBranchFilter] = useState('All');
-  const [regionFilter, setRegionFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [brandFilter, setBrandFilter] = useState('All');
   const [productFilter, setProductFilter] = useState('All');
@@ -52,13 +50,13 @@ export function Demand() {
     const basePath = `companies/${profile.companyId}`;
     const subs = [
       onSnapshot(collection(db, `${basePath}/products`), (snap) => {
-        setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setProducts(snap.docs.map(d => ({ ...d.data(), id: d.id })));
       }),
       onSnapshot(collection(db, `${basePath}/invoices`), (snap) => {
-        setInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setInvoices(snap.docs.map(d => ({ ...d.data(), id: d.id })));
       }),
       onSnapshot(collection(db, `${basePath}/purchaseOrders`), (snap) => {
-        setPurchaseOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setPurchaseOrders(snap.docs.map(d => ({ ...d.data(), id: d.id })));
       })
     ];
 
@@ -118,11 +116,9 @@ export function Demand() {
     const filteredProds = enrichedProducts.filter(p => {
       const matchCat = categoryFilter === 'All' || p.category === categoryFilter;
       const matchBrand = brandFilter === 'All' || p.brand === brandFilter;
-      const matchBranch = branchFilter === 'All' || p.branch === branchFilter;
-      const matchRegion = regionFilter === 'All' || p.region === regionFilter;
       const matchProd = productFilter === 'All' || p.id === productFilter;
       const matchSupplier = supplierFilter === 'All' || p.supplier === supplierFilter;
-      return matchCat && matchBrand && matchBranch && matchRegion && matchProd && matchSupplier;
+      return matchCat && matchBrand && matchProd && matchSupplier;
     });
 
     const activeIds = new Set(filteredProds.map(p => p.id));
@@ -390,7 +386,7 @@ export function Demand() {
       demandNetProfit,
       demandNetMarginPct
     };
-  }, [enrichedProducts, invoices, purchaseOrders, datePreset, customStartDate, customEndDate, categoryFilter, brandFilter, branchFilter, regionFilter, productFilter, supplierFilter]);
+  }, [enrichedProducts, invoices, purchaseOrders, datePreset, customStartDate, customEndDate, categoryFilter, brandFilter, productFilter, supplierFilter]);
 
   // Unique lists for global dropdowns
   const filterDropdowns = useMemo(() => {
@@ -464,7 +460,7 @@ export function Demand() {
             </span>
           </div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Demand Intelligence</h1>
-          <p className="text-slate-500 text-sm mt-1">Configure reorder formulas, track branch velocities, and optimize shopfloor raw materials alignment.</p>
+          <p className="text-slate-500 text-sm mt-1">Configure reorder formulas, track product velocities, and optimize inventory demand forecasting.</p>
         </div>
 
         {/* Global Control Center actions */}
@@ -480,13 +476,13 @@ export function Demand() {
 
       {/* Global Interactive Filters with elegant white inputs */}
       <div className="p-5 bg-slate-50 border border-slate-200/60 rounded-[1.5rem] space-y-4 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="space-y-1">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Date Horizon</label>
             <select 
               value={datePreset} 
               onChange={(e: any) => setDatePreset(e.target.value)}
-              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all"
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all cursor-pointer"
             >
               <option value="today">Today</option>
               <option value="yesterday">Yesterday</option>
@@ -499,42 +495,11 @@ export function Demand() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Branch</label>
-            <select 
-              value={branchFilter} 
-              onChange={(e) => setBranchFilter(e.target.value)}
-              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all"
-            >
-              <option value="All">All Branches</option>
-              <option value="Nairobi CBD">Nairobi CBD</option>
-              <option value="Mombasa Road">Mombasa Road</option>
-              <option value="Kisumu City">Kisumu City</option>
-              <option value="Nakuru Town">Nakuru Town</option>
-              <option value="Eldoret">Eldoret</option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Region</label>
-            <select 
-              value={regionFilter} 
-              onChange={(e) => setRegionFilter(e.target.value)}
-              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 transition-all"
-            >
-              <option value="All">All Regions</option>
-              <option value="Nairobi Region">Nairobi Region</option>
-              <option value="Coast Region">Coast Region</option>
-              <option value="Nyanza Region">Nyanza Region</option>
-              <option value="Rift Valley Region">Rift Valley Region</option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Category</label>
             <select 
               value={categoryFilter} 
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 cursor-pointer"
             >
               <option value="All">All Categories</option>
               {filterDropdowns.categories.map(c => <option key={c} value={c}>{c}</option>)}
@@ -546,7 +511,7 @@ export function Demand() {
             <select 
               value={brandFilter} 
               onChange={(e) => setBrandFilter(e.target.value)}
-              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 cursor-pointer"
             >
               <option value="All">All Brands</option>
               {filterDropdowns.brands.map(b => <option key={b} value={b}>{b}</option>)}
@@ -558,7 +523,7 @@ export function Demand() {
             <select 
               value={productFilter} 
               onChange={(e) => setProductFilter(e.target.value)}
-              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 cursor-pointer"
             >
               <option value="All">All Products</option>
               {enrichedProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -570,7 +535,7 @@ export function Demand() {
             <select 
               value={supplierFilter} 
               onChange={(e) => setSupplierFilter(e.target.value)}
-              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300"
+              className="w-full h-9 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none hover:border-slate-300 cursor-pointer"
             >
               <option value="All">All Suppliers</option>
               {filterDropdowns.suppliers.map(s => <option key={s} value={s}>{s}</option>)}

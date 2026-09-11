@@ -107,25 +107,25 @@ export function InsightsProvider({ children }: { children: React.ReactNode }) {
 
     unsubs.push(
       onSnapshot(collection(db, `${basePath}/products`), (snap) => {
-        setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setProducts(snap.docs.map((d) => ({ ...d.data(), id: d.id })));
       })
     );
 
     unsubs.push(
       onSnapshot(collection(db, `${basePath}/invoices`), (snap) => {
-        setInvoices(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setInvoices(snap.docs.map((d) => ({ ...d.data(), id: d.id })));
       })
     );
 
     unsubs.push(
       onSnapshot(collection(db, `${basePath}/stockMovements`), (snap) => {
-        setStockMovements(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setStockMovements(snap.docs.map((d) => ({ ...d.data(), id: d.id })));
       })
     );
 
     unsubs.push(
       onSnapshot(collection(db, `${basePath}/expenses`), (snap) => {
-        setExpenses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setExpenses(snap.docs.map((d) => ({ ...d.data(), id: d.id })));
       })
     );
 

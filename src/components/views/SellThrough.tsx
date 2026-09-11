@@ -60,7 +60,7 @@ export function SellThrough() {
 
     const basePath = `companies/${profile.companyId}`;
     const unsubProducts = onSnapshot(collection(db, `${basePath}/products`), (snap) => {
-      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
+      setProducts(snap.docs.map(d => ({ ...d.data(), id: d.id } as Product)));
       setLoading(false);
     }, (err) => {
       console.error("Error fetching products in SellThrough:", err);
@@ -68,13 +68,13 @@ export function SellThrough() {
     });
 
     const unsubMovements = onSnapshot(collection(db, `${basePath}/stockMovements`), (snap) => {
-      setStockMovements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setStockMovements(snap.docs.map(d => ({ ...d.data(), id: d.id })));
     }, (err) => {
       console.error("Error fetching movements in SellThrough:", err);
     });
 
     const unsubInvoices = onSnapshot(collection(db, `${basePath}/invoices`), (snap) => {
-      setInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setInvoices(snap.docs.map(d => ({ ...d.data(), id: d.id })));
     }, (err) => {
       console.error("Error fetching invoices in SellThrough:", err);
     });

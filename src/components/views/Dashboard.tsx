@@ -83,6 +83,8 @@ export function Dashboard({
   const [invoices, setInvoices] = useState<any[]>([]);
   const [creditNotes, setCreditNotes] = useState<any[]>([]);
   const [stockMovements, setStockMovements] = useState<any[]>([]);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [exportNotice, setExportNotice] = useState(false);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -133,23 +135,23 @@ export function Dashboard({
     });
 
     const unsubscribePOs = onSnapshot(poQuery, (snapshot) => {
-      setPurchaseOrders(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      setPurchaseOrders(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
 
     const unsubscribeGrns = onSnapshot(grnQuery, (snapshot) => {
-      setGrns(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      setGrns(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
 
     const unsubscribeInvoices = onSnapshot(invoicesQuery, (snapshot) => {
-      setInvoices(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      setInvoices(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
 
     const unsubscribeCreditNotes = onSnapshot(creditNotesQuery, (snapshot) => {
-      setCreditNotes(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      setCreditNotes(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
 
     const unsubscribeMovements = onSnapshot(movementsQuery, (snapshot) => {
-      setStockMovements(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      setStockMovements(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
 
     const triggerSync = async () => {
@@ -437,6 +439,52 @@ export function Dashboard({
     );
   }
 
+  const handleExportSummary = () => {
+    const rows = [
+      ["Metric", "Value"],
+      ["Total Inventory Value", `${currency}${totalCapital.toFixed(2)}`],
+      ["Total Active SKUs", totalSKUs.toString()],
+      ["Low Stock Alerts", lowStockCount.toString()],
+      ["Active System Alerts", activeAlertsCount.toString()],
+      ["Turnover Ratio", turnoverRatioData.currentTurnover.toFixed(2)],
+      [],
+      ["Top Products by Tied-Up Capital", "Category", "Quantity", "Unit Cost", "Total Value"],
+      ...allProducts.slice(0, 50).map(p => [
+        `"${p.name.replace(/"/g, '""')}"`,
+        `"${p.category || 'General'}"`,
+        p.quantity?.toString() || "0",
+        p.value?.toString() || "0",
+        ((p.value || 0) * (p.quantity || 0)).toFixed(2)
+      ])
+    ];
+
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Executive_Inventory_Summary_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setExportNotice(true);
+    setTimeout(() => setExportNotice(false), 3000);
+  };
+
+  const handleRefreshDashboard = async () => {
+    setIsUpdating(true);
+    try {
+      if (profile?.companyId) {
+        const { AlertService } = await import("../../lib/alertService");
+        await AlertService.runAlertSync(profile.companyId);
+      }
+    } catch (e) {
+      console.error("Dashboard refresh error:", e);
+    } finally {
+      setTimeout(() => setIsUpdating(false), 600);
+    }
+  };
+
   return (
     <div className="bg-[#F5F7FB] min-h-screen w-full pt-1 pb-8 font-sans scroll-smooth">
       <div className="w-full max-w-none space-y-3 min-w-0">
@@ -451,13 +499,20 @@ export function Dashboard({
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="px-4 py-2 bg-white border border-[#DDE5F0] rounded-xl text-xs font-bold text-[#06132B] shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2">
-              <Share2 className="w-3.5 h-3.5" />
-              Export
+            <button 
+              onClick={handleExportSummary}
+              className="px-4 py-2 bg-white border border-[#DDE5F0] rounded-xl text-xs font-bold text-[#06132B] shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              {exportNotice ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
+              {exportNotice ? "Exported!" : "Export"}
             </button>
-            <button className="px-5 py-2.5 bg-[#06132B] text-white rounded-xl text-xs font-bold shadow-lg shadow-navy-100 hover:opacity-90 transition-all flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5" />
-              Update
+            <button 
+              onClick={handleRefreshDashboard}
+              disabled={isUpdating}
+              className="px-5 py-2.5 bg-[#06132B] text-white rounded-xl text-xs font-bold shadow-lg shadow-navy-100 hover:opacity-90 transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-75"
+            >
+              {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+              {isUpdating ? "Syncing..." : "Update"}
             </button>
           </div>
         </div>

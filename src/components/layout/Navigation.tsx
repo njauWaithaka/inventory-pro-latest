@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard,
   Package,
@@ -48,13 +48,24 @@ import {
   Wallet,
   Tag,
   Bookmark,
+  LogOut,
+  CheckCircle2,
+  AlertTriangle,
+  ExternalLink,
+  ShieldAlert,
+  MessageSquare,
+  Building2,
+  Check,
+  ArrowRight,
+  HelpCircle,
+  Sliders,
 } from "lucide-react";
 import { ViewType, Product } from "../../types";
 import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, writeBatch } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 interface SidebarProps {
@@ -481,117 +492,455 @@ export function Sidebar({
   );
 }
 
-export function Navbar({ onMenuClick, currentView }: { onMenuClick: () => void; currentView?: ViewType }) {
+export function Navbar({ 
+  onMenuClick, 
+  currentView,
+  onNavigate,
+}: { 
+  onMenuClick: () => void; 
+  currentView?: ViewType;
+  onNavigate?: (view: ViewType) => void;
+}) {
   const { user, logout } = useAuth();
-  const { profile } = useSettings();
-  const title = user?.displayName || user?.email?.split("@")[0] || "User";
+  const { profile, company } = useSettings();
+  const title = profile?.name || user?.displayName || user?.email?.split("@")[0] || "User";
   const [activeAlertCount, setActiveAlertCount] = useState(0);
+  const [alertsList, setAlertsList] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+
+  const notifRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!profile?.companyId) return;
 
     const path = `companies/${profile.companyId}/inventory_alerts`;
     const unsubscribe = onSnapshot(collection(db, path), (snapshot) => {
-      const active = snapshot.docs.filter((doc) => {
-        const data = doc.data();
-        return data.status !== "resolved" && data.status !== "dismissed";
-      });
+      const allAlerts = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+      const active = allAlerts.filter((data: any) => data.status !== "resolved" && data.status !== "dismissed");
       setActiveAlertCount(active.length);
+      setAlertsList(active.slice(0, 8)); // Top 8 active alerts
     });
 
     return () => unsubscribe();
   }, [profile?.companyId]);
 
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleResolveAlert = async (alertId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!profile?.companyId) return;
+    setResolvingId(alertId);
+    try {
+      const alertRef = doc(db, `companies/${profile.companyId}/inventory_alerts`, alertId);
+      await setDoc(alertRef, { status: "resolved", resolvedAt: new Date().toISOString() }, { merge: true });
+    } catch (err) {
+      console.error("Failed to resolve alert:", err);
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    if (!profile?.companyId || alertsList.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      alertsList.forEach(alert => {
+        const alertRef = doc(db, `companies/${profile.companyId}/inventory_alerts`, alert.id);
+        batch.set(alertRef, { status: "read" }, { merge: true });
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error("Failed to mark all read:", err);
+    }
+  };
+
+  const handleNavigate = (view: ViewType) => {
+    setShowNotifications(false);
+    setShowProfileMenu(false);
+    if (onNavigate) {
+      onNavigate(view);
+    }
+  };
+
   const isPOS = currentView === "pos";
 
   return (
-    <header className={cn(
-      "sticky top-0 z-30 h-16 flex items-center px-4 sm:px-6 lg:px-8 transition-colors duration-200",
-      isPOS
-        ? "bg-white sm:bg-[#f8f9fa] border-b border-[#e4e6e9] text-[#1a1c20] shadow-[0_1px_3px_rgba(20,20,30,0.05)]"
-        : "bg-brand-header border-b border-brand-border text-slate-900"
-    )}>
-      <div className="flex items-center gap-4 flex-1">
-        <button
-          onClick={onMenuClick}
-          className={cn(
-            "md:hidden p-2 rounded-lg transition-colors",
-            isPOS ? "text-[#1a1c20] hover:bg-[#f1f2f4]" : "text-slate-500 hover:bg-slate-100"
-          )}
-        >
-          <Menu className="w-6 h-6" />
-        </button>
-
-        <div className="relative flex-1 max-w-[200px] sm:max-w-sm group text-left">
-          <Search className={cn("absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors", isPOS ? "text-[#9096a0]" : "text-slate-400")} />
-          <input
-            type="text"
-            placeholder="Search..."
-            className={cn(
-              "w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none transition-all",
-              isPOS
-                ? "bg-white border-[#e4e6e9] text-[#1a1c20] focus:border-[#1a8a5f] focus:ring-1 focus:ring-[#1a8a5f]/20 placeholder-[#9096a0] shadow-xs"
-                : "bg-slate-100 border-slate-200 text-slate-900 focus:border-blue-500 focus:bg-white placeholder-slate-400"
-            )}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3 sm:gap-4 ml-4">
-        <div className="relative group">
-          <button className={cn(
-            "p-2.5 rounded-full relative transition-all duration-300 transform group-hover:scale-105 group-active:scale-95",
-            isPOS ? "text-[#1a1c20] hover:bg-[#f1f2f4] hover:text-[#1a8a5f]" : "text-slate-500 hover:bg-slate-100 hover:text-blue-600"
-          )}>
-            <Bell className="w-5 h-5 transition-transform duration-300" />
-
-            {activeAlertCount > 0 && (
-              <span className="absolute top-2 right-2 flex h-4 w-4">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className={cn(
-                  "relative inline-flex items-center justify-center rounded-full h-4 w-4 bg-rose-500 text-[9px] font-black text-white shadow-sm ring-2 overflow-hidden",
-                  isPOS ? "ring-white" : "ring-white"
-                )}>
-                  {activeAlertCount}
-                </span>
-              </span>
-            )}
-          </button>
-        </div>
-
-        <div className={cn("flex items-center gap-2 group border-l pl-4 ml-1 sm:ml-0 relative", isPOS ? "border-[#e4e6e9]" : "border-slate-100")}>
-          <div className="hidden lg:block text-right">
-            <p className={cn("text-[13px] font-bold leading-none capitalize", isPOS ? "text-[#1a1c20]" : "text-slate-900")}>
-              {title}
-            </p>
-            <p className={cn("text-[10px] mt-1", isPOS ? "text-[#6b6f78]" : "text-slate-500")}>Inventory Manager</p>
-          </div>
+    <>
+      <header className={cn(
+        "sticky top-0 z-30 h-16 flex items-center px-4 sm:px-6 lg:px-8 transition-colors duration-200",
+        isPOS
+          ? "bg-white sm:bg-[#f8f9fa] border-b border-[#e4e6e9] text-[#1a1c20] shadow-[0_1px_3px_rgba(20,20,30,0.05)]"
+          : "bg-brand-header border-b border-brand-border text-slate-900"
+      )}>
+        <div className="flex items-center gap-4 flex-1">
           <button
-            onClick={() => {
-              if (confirm("Are you sure you want to log out?")) {
-                logout();
-              }
-            }}
+            onClick={onMenuClick}
             className={cn(
-              "w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border shadow-sm overflow-hidden shrink-0 transition-all group",
-              isPOS ? "bg-[#f1f2f4] border-[#e4e6e9] hover:ring-2 hover:ring-[#1a8a5f]" : "bg-slate-200 border-slate-100 hover:ring-2 hover:ring-blue-500"
+              "md:hidden p-2 rounded-lg transition-colors",
+              isPOS ? "text-[#1a1c20] hover:bg-[#f1f2f4]" : "text-slate-500 hover:bg-slate-100"
             )}
-            title="Log out"
+            title="Open Menu"
           >
-            {user?.photoURL ? (
-              <img
-                src={user.photoURL}
-                alt="Avatar"
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <User className={cn("w-4 h-4 sm:w-5 sm:h-5", isPOS ? "text-[#1a1c20] group-hover:text-[#1a8a5f]" : "text-slate-600 group-hover:text-blue-600")} />
-            )}
+            <Menu className="w-6 h-6" />
           </button>
+
+          <div className="relative flex-1 max-w-[200px] sm:max-w-sm group text-left">
+            <Search className={cn("absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors", isPOS ? "text-[#9096a0]" : "text-slate-400")} />
+            <input
+              type="text"
+              placeholder="Search across inventory..."
+              className={cn(
+                "w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none transition-all",
+                isPOS
+                  ? "bg-white border-[#e4e6e9] text-[#1a1c20] focus:border-[#1a8a5f] focus:ring-1 focus:ring-[#1a8a5f]/20 placeholder-[#9096a0] shadow-xs"
+                  : "bg-slate-100 border-slate-200 text-slate-900 focus:border-blue-500 focus:bg-white placeholder-slate-400"
+              )}
+            />
+          </div>
         </div>
-      </div>
-    </header>
+
+        <div className="flex items-center gap-3 sm:gap-4 ml-4">
+          {/* Notifications Bell with Interactive Popover */}
+          <div className="relative" ref={notifRef}>
+            <button 
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                setShowProfileMenu(false);
+              }}
+              className={cn(
+                "p-2.5 rounded-full relative transition-all duration-300 transform hover:scale-105 active:scale-95 cursor-pointer",
+                showNotifications
+                  ? "bg-blue-50 text-blue-600 ring-2 ring-blue-500/20"
+                  : isPOS 
+                    ? "text-[#1a1c20] hover:bg-[#f1f2f4] hover:text-[#1a8a5f]" 
+                    : "text-slate-500 hover:bg-slate-100 hover:text-blue-600"
+              )}
+              title="Inventory Notifications & Alerts"
+            >
+              <Bell className="w-5 h-5 transition-transform duration-300" />
+
+              {activeAlertCount > 0 && (
+                <span className="absolute top-2 right-2 flex h-4 w-4">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex items-center justify-center rounded-full h-4 w-4 bg-rose-500 text-[9px] font-black text-white shadow-sm ring-2 ring-white overflow-hidden">
+                    {activeAlertCount > 99 ? '99+' : activeAlertCount}
+                  </span>
+                </span>
+              )}
+            </button>
+
+            {/* Notification Popover */}
+            <AnimatePresence>
+              {showNotifications && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden text-left"
+                >
+                  {/* Header */}
+                  <div className="p-4 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                        <Bell className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900 leading-tight">Notifications</h4>
+                        <p className="text-[10px] font-bold text-slate-400">
+                          {activeAlertCount > 0 ? `${activeAlertCount} active alerts` : 'All systems normal'}
+                        </p>
+                      </div>
+                    </div>
+                    {activeAlertCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:underline px-2 py-1"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Body List */}
+                  <div className="max-h-[340px] overflow-y-auto divide-y divide-slate-100">
+                    {alertsList.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                          <CheckCircle2 className="w-6 h-6" />
+                        </div>
+                        <p className="text-xs font-bold text-slate-800">No Active Alerts</p>
+                        <p className="text-[11px] text-slate-400 mt-1 max-w-[200px] mx-auto">
+                          Stock levels, expiring products, and purchase orders are in good standing.
+                        </p>
+                      </div>
+                    ) : (
+                      alertsList.map((alert) => {
+                        const isCritical = alert.severity === 'high' || alert.severity === 'critical' || alert.type === 'out_of_stock';
+                        const isWarning = alert.severity === 'medium' || alert.type === 'low_stock';
+
+                        return (
+                          <div 
+                            key={alert.id}
+                            className="p-3.5 hover:bg-slate-50 transition-colors flex items-start justify-between gap-3 group"
+                          >
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className={cn(
+                                "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
+                                isCritical ? "bg-rose-100 text-rose-600" : isWarning ? "bg-amber-100 text-amber-600" : "bg-blue-100 text-blue-600"
+                              )}>
+                                {isCritical ? <ShieldAlert className="w-4 h-4" /> : isWarning ? <AlertTriangle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-slate-900 truncate">
+                                  {alert.title || alert.productName || 'Inventory Alert'}
+                                </p>
+                                <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5 leading-relaxed">
+                                  {alert.message || alert.description || `Item requires attention (SKU: ${alert.sku || alert.productId || 'N/A'})`}
+                                </p>
+                                <span className="text-[9px] font-bold text-slate-400 mt-1 block">
+                                  {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString() : 'Recent'}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={(e) => handleResolveAlert(alert.id, e)}
+                              disabled={resolvingId === alert.id}
+                              className="opacity-80 group-hover:opacity-100 text-[10px] font-bold text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded-md border border-slate-200 transition-all shrink-0 cursor-pointer"
+                              title="Mark Resolved"
+                            >
+                              {resolvingId === alert.id ? '...' : <Check className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                    <button
+                      onClick={() => handleNavigate('alerts')}
+                      className="w-full py-2 bg-[#0F172A] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <span>View All Inventory Alerts</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Profile Circle with Interactive Popover Menu */}
+          <div className="relative" ref={profileRef}>
+            <div 
+              onClick={() => {
+                setShowProfileMenu(!showProfileMenu);
+                setShowNotifications(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 border-l pl-4 ml-1 sm:ml-0 cursor-pointer group select-none", 
+                isPOS ? "border-[#e4e6e9]" : "border-slate-200"
+              )}
+            >
+              <div className="hidden lg:block text-right">
+                <p className={cn("text-[13px] font-bold leading-none capitalize", isPOS ? "text-[#1a1c20]" : "text-slate-900")}>
+                  {title}
+                </p>
+                <p className={cn("text-[10px] mt-1 font-medium", isPOS ? "text-[#6b6f78]" : "text-slate-500")}>
+                  {profile?.role || "Inventory Manager"}
+                </p>
+              </div>
+
+              <div
+                className={cn(
+                  "w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border shadow-xs overflow-hidden shrink-0 transition-all",
+                  showProfileMenu 
+                    ? "ring-2 ring-blue-500 border-blue-500" 
+                    : isPOS 
+                      ? "bg-[#f1f2f4] border-[#e4e6e9] group-hover:ring-2 group-hover:ring-[#1a8a5f]" 
+                      : "bg-slate-100 border-slate-200 group-hover:ring-2 group-hover:ring-blue-500"
+                )}
+                title="Account & Profile Menu"
+              >
+                {user?.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span className="text-xs font-black text-slate-700 uppercase">
+                    {(title || "U").charAt(0)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Profile Popover Menu */}
+            <AnimatePresence>
+              {showProfileMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="absolute right-0 mt-3 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden text-left"
+                >
+                  {/* User Profile Header Card */}
+                  <div className="p-4 bg-gradient-to-br from-slate-900 to-[#0F172A] text-white">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-xl bg-blue-600/30 border border-blue-400/30 flex items-center justify-center font-black text-base text-white shrink-0 overflow-hidden">
+                        {user?.photoURL ? (
+                          <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <span>{(title || "U").charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold truncate leading-tight">{title}</h4>
+                        <p className="text-[11px] text-slate-300 truncate mt-0.5 font-mono">{user?.email || "Signed in"}</p>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          <span className="text-[10px] font-semibold text-slate-300 capitalize">{company?.name || "Workspace"} • {profile?.role || "Admin"}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Navigation Links */}
+                  <div className="p-2 space-y-0.5 text-xs font-semibold text-slate-700">
+                    <button
+                      onClick={() => handleNavigate('settings')}
+                      className="w-full px-3 py-2 rounded-xl hover:bg-slate-100 flex items-center gap-2.5 transition-colors text-left cursor-pointer"
+                    >
+                      <Settings className="w-4 h-4 text-slate-400" />
+                      <span>Company & Account Settings</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleNavigate('reports')}
+                      className="w-full px-3 py-2 rounded-xl hover:bg-slate-100 flex items-center gap-2.5 transition-colors text-left cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4 text-slate-400" />
+                      <span>Executive Reports & Logs</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleNavigate('analytics')}
+                      className="w-full px-3 py-2 rounded-xl hover:bg-slate-100 flex items-center gap-2.5 transition-colors text-left cursor-pointer"
+                    >
+                      <BarChart3 className="w-4 h-4 text-slate-400" />
+                      <span>Analytics & Inventory Velocity</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleNavigate('alerts')}
+                      className="w-full px-3 py-2 rounded-xl hover:bg-slate-100 flex items-center justify-between transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Bell className="w-4 h-4 text-slate-400" />
+                        <span>Inventory Alerts Center</span>
+                      </div>
+                      {activeAlertCount > 0 && (
+                        <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md">
+                          {activeAlertCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleNavigate('inventory_pro_chat')}
+                      className="w-full px-3 py-2 rounded-xl hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors text-left cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-blue-500" />
+                      <span className="font-bold">Invenio Intelligence AI</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleNavigate('help')}
+                      className="w-full px-3 py-2 rounded-xl hover:bg-slate-100 flex items-center gap-2.5 transition-colors text-left cursor-pointer"
+                    >
+                      <HelpCircle className="w-4 h-4 text-slate-400" />
+                      <span>Help & Documentation</span>
+                    </button>
+                  </div>
+
+                  {/* Sign Out Section */}
+                  <div className="p-2 border-t border-slate-100 bg-slate-50/50">
+                    <button
+                      onClick={() => setShowLogoutConfirm(true)}
+                      className="w-full px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition-colors text-xs font-bold text-left cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-rose-500" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </header>
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl border border-slate-200 text-center"
+            >
+              <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <LogOut className="w-7 h-7" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight">Confirm Sign Out</h3>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed font-medium">
+                Are you sure you want to end your current session? You will need to log in again to access the workspace.
+              </p>
+              <div className="grid grid-cols-2 gap-3 mt-6">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLogoutConfirm(false);
+                    setShowProfileMenu(false);
+                    logout();
+                  }}
+                  className="py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-rose-200 cursor-pointer"
+                >
+                  Yes, Sign Out
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

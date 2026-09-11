@@ -3,15 +3,23 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Fallback models in priority order
-const FALLBACK_MODELS = [
-  "gemini-3.7-flash",
-  "gemini-2.5-flash",
+// Robust priority model list for enterprise intelligence
+// gemini-3.1-flash-lite and gemini-flash-latest provide lightning-fast, high-availability throughput
+const INSIGHT_MODELS = [
   "gemini-3.1-flash-lite",
-  "gemini-flash-latest"
+  "gemini-flash-latest",
+  "gemini-3.7-flash",
+  "gemini-3.1-pro-preview",
 ];
 
-// Helper to call Gemini with model fallback and retry on 503/429
+const CHAT_MODELS = [
+  "gemini-3.7-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-flash-latest",
+  "gemini-3.1-pro-preview",
+];
+
+// Helper to call Gemini with model fallback and intelligent retry
 async function callGeminiWithFallback(
   ai: GoogleGenAI,
   config: {
@@ -20,35 +28,31 @@ async function callGeminiWithFallback(
     responseMimeType?: string;
     responseSchema?: any;
     temperature?: number;
-  }
+  },
+  modelList: string[] = INSIGHT_MODELS
 ) {
   let lastError: any = null;
 
-  for (const model of FALLBACK_MODELS) {
-    // Up to 2 attempts per model
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: config.contents,
-          config: {
-            systemInstruction: config.systemInstruction,
-            responseMimeType: config.responseMimeType,
-            responseSchema: config.responseSchema,
-            temperature: config.temperature ?? 0.4,
-          },
-        });
-        if (response && response.text) {
-          return { text: response.text, modelUsed: model };
-        }
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`Gemini attempt ${attempt} on model ${model} failed:`, err?.message || err);
-        // Wait briefly before retrying if 503 or 429
-        if (attempt === 1) {
-          await new Promise((r) => setTimeout(r, 800));
-        }
+  for (const model of modelList) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: config.contents,
+        config: {
+          systemInstruction: config.systemInstruction,
+          responseMimeType: config.responseMimeType,
+          responseSchema: config.responseSchema,
+          temperature: config.temperature ?? 0.3,
+        },
+      });
+      if (response && response.text) {
+        return { text: response.text, modelUsed: model };
       }
+    } catch (err: any) {
+      lastError = err;
+      const errMessage = err?.message || String(err);
+      // Log model failover gracefully
+      console.info(`Model ${model} unavailable (${err?.status || err?.code || 'status'}), failing over to next model.`);
     }
   }
 
@@ -348,7 +352,7 @@ ${JSON.stringify(effectiveContext, null, 2)}`;
         contents: formattedContents,
         systemInstruction,
         temperature: 0.6,
-      });
+      }, CHAT_MODELS);
 
       return res.json({ text: text || "Analysis completed based on your live inventory records." });
     } catch (error: any) {

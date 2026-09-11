@@ -146,7 +146,7 @@ export function Categories() {
 
     const path = `companies/${profile.companyId}/categories`;
     const unsubscribe = onSnapshot(collection(db, path), (snapshot) => {
-      setCustomCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setCustomCategories(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (error) => {
       console.error("Error loading categories collection:", error);
     });

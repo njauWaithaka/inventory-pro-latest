@@ -16,8 +16,9 @@ export class AlertService {
       const productsRef = collection(db, `companies/${companyId}/products`);
       const productsSnap = await getDocs(productsRef);
       const products = productsSnap.docs.map(doc => ({
+        ...doc.data(),
         id: doc.id,
-        ...doc.data()
+        productId: doc.id
       })) as any[];
 
       // 2. Fetch sales
@@ -29,8 +30,8 @@ export class AlertService {
       const poRef = collection(db, `companies/${companyId}/purchaseOrders`);
       const poSnap = await getDocs(poRef);
       const purchaseOrders = poSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        id: doc.id
       })) as any[];
 
       // 4. Fetch existing alerts to preserve status (Read, Resolved, Dismissed)
@@ -128,7 +129,9 @@ export class AlertService {
 
         // Prepare product updates
         const prodRef = doc(db, `companies/${companyId}/products`, product.id);
-        batch.update(prodRef, {
+        batch.set(prodRef, {
+          id: product.id,
+          productId: product.id,
           averageDailySales: ADS,
           calculatedReorderPoint: dynamicROP,
           safetyStock: Math.round(safetyStock),
@@ -136,7 +139,7 @@ export class AlertService {
           reorderPoint: activeROP,
           movement: speed,
           updatedAt: new Date().toISOString()
-        });
+        }, { merge: true });
 
         // ==========================================
         // 6. Generate Product Alerts

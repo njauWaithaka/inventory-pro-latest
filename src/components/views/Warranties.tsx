@@ -34,7 +34,7 @@ export function Warranties() {
     }
     const path = `companies/${profile.companyId}/warranties`;
     const unsubscribe = onSnapshot(collection(db, path), (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const docs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       setWarranties(docs);
       setLoading(false);
     }, (error) => {

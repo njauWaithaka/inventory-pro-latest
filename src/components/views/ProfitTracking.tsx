@@ -321,6 +321,44 @@ export function ProfitTracking() {
     return `${symbol} ${val.toLocaleString()}`;
   };
 
+  const handleExportProfitReport = () => {
+    const rows = [
+      ["Profitability & Margin Analytics Report", `Period: ${timeRange.toUpperCase()}`],
+      ["Generated At", new Date().toLocaleString()],
+      [],
+      ["Financial KPI Metric", "Amount (Currency)"],
+      ["Gross Sales Revenue", aggregates.totalRevenue.toFixed(2)],
+      ["Cost of Goods Sold (COGS)", aggregates.totalCOGS.toFixed(2)],
+      ["Gross Profit", aggregates.totalGrossProfit.toFixed(2)],
+      ["Gross Margin %", `${aggregates.grossMarginPct.toFixed(2)}%`],
+      ["Operating Expenses (Estimated)", aggregates.operatingExpenses.toFixed(2)],
+      ["Net Operating Profit", aggregates.totalNetProfit.toFixed(2)],
+      ["Net Margin %", `${aggregates.netMarginPct.toFixed(2)}%`],
+      [],
+      ["Product SKU", "Product Name", "Category", "Sales Volume", "Unit Buying Price", "Unit Selling Price", "Gross Revenue", "Gross Profit", "Margin %"],
+      ...productMargins.map(p => [
+        `"${p.sku || ''}"`,
+        `"${p.name.replace(/"/g, '""')}"`,
+        `"${p.category || 'General'}"`,
+        p.volume.toString(),
+        p.costOfGoods.toFixed(2),
+        p.sellingPrice.toFixed(2),
+        (p.sellingPrice * p.volume).toFixed(2),
+        ((p.sellingPrice - p.costOfGoods) * p.volume).toFixed(2),
+        `${(p.sellingPrice > 0 ? ((p.sellingPrice - p.costOfGoods) / p.sellingPrice) * 100 : 0).toFixed(1)}%`
+      ])
+    ];
+
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Profit_Margin_Report_${timeRange}_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[500px] gap-3">
@@ -365,9 +403,12 @@ export function ProfitTracking() {
             </button>
           </div>
 
-          <button className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-sm">
+          <button 
+            onClick={handleExportProfitReport}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+          >
             <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Export XLS</span>
+            <span className="hidden sm:inline">Export CSV/XLS</span>
           </button>
         </div>
       </div>

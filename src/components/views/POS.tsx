@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, 
+  Search, ShoppingCart, Trash2, Plus, Minus,
   Banknote, Receipt, Package, Loader2, CheckCircle2,
   Scan, Pause, RotateCcw, Smartphone, X, FileText,
   Coins, UserCheck, AlertCircle, Sparkles,
@@ -67,7 +67,6 @@ export function POS() {
   const [cashTendered, setCashTendered] = useState<number | ''>('');
   const [mpesaCode, setMpesaCode] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState('');
-  const [cardAuthCode, setCardAuthCode] = useState('');
   const [splitCashAmount, setSplitCashAmount] = useState<number | ''>('');
   const [stkStatus, setStkStatus] = useState<'idle' | 'sending' | 'sent' | 'confirmed' | 'failed'>('idle');
 
@@ -1207,11 +1206,10 @@ export function POS() {
               {checkoutStep === 'payment' && (
                 <div className="space-y-4 animate-in fade-in duration-200">
                   {/* Payment Method Selector */}
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {[
                       { id: 'cash', label: 'Cash', icon: Banknote },
                       { id: 'mpesa', label: 'M-Pesa', icon: Smartphone },
-                      { id: 'card', label: 'Card', icon: CreditCard },
                     ].map(method => {
                       const Icon = method.icon;
                       const isSelected = paymentMethod === method.id;
@@ -1375,31 +1373,6 @@ export function POS() {
                           </div>
                         </div>
                       )}
-                    </div>
-                  )}
-
-                  {/* CARD PAYMENT FLOW */}
-                  {paymentMethod === 'card' && (
-                    <div className="bg-[#f8f9fa] border border-[#e4e6e9] p-4 rounded-2xl space-y-3 animate-in fade-in duration-150">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center">
-                          <CreditCard className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-[#1a1c20] uppercase tracking-wide">POS Card Terminal</p>
-                          <p className="text-[10px] text-[#6b6f78] font-medium">Swipe/Tap customer debit or credit card</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-[#1a1c20] uppercase">Auth Code:</span>
-                        <input
-                          type="text"
-                          placeholder="e.g. AUTH-88912"
-                          value={cardAuthCode}
-                          onChange={(e) => setCardAuthCode(e.target.value)}
-                          className="flex-1 h-9 px-3 bg-white border border-[#e4e6e9] rounded-xl text-xs font-mono font-bold text-[#1a1c20] outline-none focus:border-blue-500"
-                        />
-                      </div>
                     </div>
                   )}
 

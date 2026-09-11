@@ -21,7 +21,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { cn } from '../../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../../../lib/firebase';
-import { collection, doc, writeBatch, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, writeBatch, getDocs, getDoc, setDoc } from 'firebase/firestore';
 
 interface ExpensesProps {
   onNavigate?: (view: ViewType) => void;
@@ -54,156 +54,38 @@ export function Expenses({ onNavigate }: ExpensesProps) {
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
   const [selectedExpenseForView, setSelectedExpenseForView] = useState<Expense | null>(null);
 
-  // Auto-seed initial items matching design if company has no expenses/recurring
+  // Initialize standard categories and petty cash float if not yet present
   useEffect(() => {
     if (!companyId) return;
 
-    async function seedInitialDataIfNeeded() {
+    async function initProductionDefaultsIfNeeded() {
       try {
-        const recSnap = await getDocs(collection(db, `companies/${companyId}/recurring_expenses`));
-        const expSnap = await getDocs(collection(db, `companies/${companyId}/expenses`));
-
-        const batch = writeBatch(db);
-        let hasWrites = false;
-
-        if (recSnap.empty) {
-          const initialRecurring: RecurringExpense[] = [
-            {
-              id: 'rec_rent_01',
-              title: 'Shop rent',
-              categoryId: 'cat_rent',
-              categoryName: 'Rent',
-              amount: 45000,
-              vendorName: 'Property Landlord',
-              frequency: 'Monthly',
-              startDate: '2026-01-01',
-              nextDueDate: '2026-09-01',
-              autoLog: true,
-              status: 'ACTIVE',
-              paymentMethod: 'Bank Transfer',
-              department: 'Operations',
-              notes: 'Monthly on the 1st',
-              createdAt: new Date().toISOString()
-            },
-            {
-              id: 'rec_salaries_01',
-              title: 'Staff salaries',
-              categoryId: 'cat_salaries',
-              categoryName: 'Salaries',
-              amount: 118000,
-              vendorName: 'Store Staff & Cashiers',
-              frequency: 'Monthly',
-              startDate: '2026-01-28',
-              nextDueDate: '2026-08-28',
-              autoLog: true,
-              status: 'ACTIVE',
-              paymentMethod: 'Bank Transfer',
-              department: 'Operations',
-              notes: 'Monthly on the 28th',
-              createdAt: new Date().toISOString()
-            },
-            {
-              id: 'rec_electricity_01',
-              title: 'Electricity',
-              categoryId: 'cat_utilities',
-              categoryName: 'Utilities',
-              amount: 12000,
-              vendorName: 'Kenya Power (KPLC)',
-              frequency: 'Monthly',
-              startDate: '2026-01-15',
-              nextDueDate: '2026-08-15',
-              autoLog: false,
-              status: 'PAUSED',
-              paymentMethod: 'M-Pesa',
-              department: 'Operations',
-              notes: 'Monthly utilities',
-              createdAt: new Date().toISOString()
-            }
-          ];
-
-          initialRecurring.forEach(rec => {
-            batch.set(doc(db, `companies/${companyId}/recurring_expenses`, rec.id), rec);
+        const catSnap = await getDocs(collection(db, `companies/${companyId}/expense_categories`));
+        if (catSnap.empty) {
+          const batch = writeBatch(db);
+          DEFAULT_EXPENSE_CATEGORIES.forEach(cat => {
+            batch.set(doc(db, `companies/${companyId}/expense_categories`, cat.id), cat);
           });
-          hasWrites = true;
-        }
-
-        if (expSnap.empty) {
-          const initialExpenses: Expense[] = [
-            {
-              id: 'exp_fuel_01',
-              expenseNumber: 'EXP-8801',
-              title: 'Fuel for delivery van',
-              categoryId: 'cat_petty',
-              categoryName: 'Petty cash',
-              amount: 2500,
-              paymentMethod: 'Cash',
-              department: 'Logistics',
-              status: 'PAID',
-              date: '2026-08-14',
-              notes: 'Fuel top-up for morning customer dispatch van',
-              paidAt: '2026-08-14T09:30:00Z',
-              createdAt: '2026-08-14T09:30:00Z',
-              updatedAt: '2026-08-14T09:30:00Z'
-            },
-            {
-              id: 'exp_rent_01',
-              expenseNumber: 'EXP-8802',
-              title: 'Shop rent - August',
-              categoryId: 'cat_rent',
-              categoryName: 'Rent',
-              amount: 45000,
-              paymentMethod: 'Bank Transfer',
-              department: 'Operations',
-              status: 'PAID',
-              date: '2026-08-01',
-              notes: 'August commercial retail lease payment',
-              paidAt: '2026-08-01T10:00:00Z',
-              createdAt: '2026-08-01T10:00:00Z',
-              updatedAt: '2026-08-01T10:00:00Z'
-            },
-            {
-              id: 'exp_office_01',
-              expenseNumber: 'EXP-8803',
-              title: 'Office stationery',
-              categoryId: 'cat_supplies',
-              categoryName: 'Supplies',
-              amount: 1800,
-              paymentMethod: 'M-Pesa',
-              department: 'Administration',
-              status: 'PAID',
-              date: '2026-08-10',
-              notes: 'Thermal receipt paper & pens for POS registers',
-              paidAt: '2026-08-10T14:15:00Z',
-              createdAt: '2026-08-10T14:15:00Z',
-              updatedAt: '2026-08-10T14:15:00Z'
-            }
-          ];
-
-          initialExpenses.forEach(exp => {
-            batch.set(doc(db, `companies/${companyId}/expenses`, exp.id), exp);
-          });
-          hasWrites = true;
+          await batch.commit();
         }
 
         // Check Petty Cash float doc
         const floatRef = doc(db, `companies/${companyId}/petty_cash_meta`, 'current_float');
-        batch.set(floatRef, {
-          currentBalance: 8420,
-          targetFloat: 15000,
-          minimumThreshold: 5000,
-          lastReplenished: new Date().toISOString()
-        }, { merge: true });
-        hasWrites = true;
-
-        if (hasWrites) {
-          await batch.commit();
+        const floatSnap = await getDoc(floatRef);
+        if (!floatSnap.exists()) {
+          await setDoc(floatRef, {
+            currentBalance: 0,
+            targetFloat: 10000,
+            minimumThreshold: 2000,
+            lastReplenished: new Date().toISOString()
+          });
         }
       } catch (err) {
-        console.error("Failed to seed demo expense data:", err);
+        console.error("Error initializing production expense defaults:", err);
       }
     }
 
-    seedInitialDataIfNeeded();
+    initProductionDefaultsIfNeeded();
   }, [companyId]);
 
   // Subscriptions
@@ -251,27 +133,22 @@ export function Expenses({ onNavigate }: ExpensesProps) {
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
 
-    const total = monthExpenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-    // If demo dataset with few items, show representative figure or calculated
-    return total > 0 ? total : 284600;
+    return monthExpenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   }, [expenses]);
 
   const recurringActiveTotal = useMemo(() => {
     const active = recurringExpenses.filter(r => r.status === 'ACTIVE');
-    const sum = active.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-    return sum > 0 ? sum : 165000;
+    return active.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   }, [recurringExpenses]);
 
   const activeSchedulesCount = useMemo(() => {
-    const active = recurringExpenses.filter(r => r.status === 'ACTIVE').length;
-    return active > 0 ? active : 4;
+    return recurringExpenses.filter(r => r.status === 'ACTIVE').length;
   }, [recurringExpenses]);
 
   const upcoming7DaysTotal = useMemo(() => {
-    const upcoming = recurringExpenses
+    return recurringExpenses
       .filter(r => r.status === 'ACTIVE')
       .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-    return upcoming > 0 ? upcoming : 92000;
   }, [recurringExpenses]);
 
   // Toggle recurring schedule active / paused state

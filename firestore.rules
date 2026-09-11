@@ -48,6 +48,17 @@ service cloud.firestore {
         && (data.quantity == null || data.quantity is number);
     }
 
+    // Health check endpoint for test connection
+    match /test/{testId} {
+      allow read: if true;
+    }
+
+    // User profile access
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
     // Core rule matchers for Company scoping
     match /companies/{companyId} {
       allow read: if true;

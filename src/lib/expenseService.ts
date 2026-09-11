@@ -142,293 +142,20 @@ export async function ensureExpenseDefaults(companyId: string): Promise<void> {
         }
       }
 
-      // Initial Demo Expenses
-      const now = Date.now();
-      const dayMs = 86400000;
 
-      const demoExpenses: Partial<Expense>[] = [
-        {
-          id: 'exp_001',
-          expenseNumber: 'EXP-2026-001',
-          title: 'Main Showroom & Warehouse Lease',
-          categoryId: 'cat_rent',
-          categoryName: 'Facility & Warehouse Rent',
-          amount: 45000,
-          taxAmount: 0,
-          taxDeductible: true,
-          vendorName: 'Prime Commercial Properties Ltd',
-          date: new Date(now - 12 * dayMs).toISOString().split('T')[0],
-          paymentMethod: 'Bank Transfer',
-          department: 'Operations',
-          status: 'PAID',
-          reference: 'INV-PROP-8891',
-          notes: 'March warehouse rent fully settled via wire transfer.',
-          paidAt: new Date(now - 12 * dayMs).toISOString(),
-          isRecurring: true,
-          createdAt: new Date(now - 12 * dayMs).toISOString(),
-          updatedAt: new Date(now - 12 * dayMs).toISOString()
-        },
-        {
-          id: 'exp_002',
-          expenseNumber: 'EXP-2026-002',
-          title: 'High-Speed Dedicated Fiber Internet',
-          categoryId: 'cat_internet',
-          categoryName: 'Internet, SaaS & Telephony',
-          amount: 6500,
-          taxAmount: 896,
-          taxDeductible: true,
-          vendorName: 'Safaricom Business / Fiber ISP',
-          date: new Date(now - 8 * dayMs).toISOString().split('T')[0],
-          paymentMethod: 'M-Pesa',
-          department: 'IT & Software',
-          status: 'PAID',
-          reference: 'ACC-892182-SAF',
-          notes: '100Mbps dedicated fiber connection for POS and cloud ERP sync.',
-          paidAt: new Date(now - 8 * dayMs).toISOString(),
-          isRecurring: true,
-          createdAt: new Date(now - 8 * dayMs).toISOString(),
-          updatedAt: new Date(now - 8 * dayMs).toISOString()
-        },
-        {
-          id: 'exp_003',
-          expenseNumber: 'EXP-2026-003',
-          title: 'Monthly Electricity & 3-Phase Meter Bill',
-          categoryId: 'cat_utilities',
-          categoryName: 'Utilities, Power & Water',
-          amount: 11400,
-          taxAmount: 1572,
-          taxDeductible: true,
-          vendorName: 'Kenya Power & Lighting (KPLC)',
-          date: new Date(now - 5 * dayMs).toISOString().split('T')[0],
-          dueDate: new Date(now + 4 * dayMs).toISOString().split('T')[0],
-          paymentMethod: 'M-Pesa',
-          department: 'Operations',
-          status: 'PAYABLE',
-          reference: 'KPLC-BILL-99023',
-          notes: 'Electricity bill due on the 20th. Meter reading confirmed.',
-          createdAt: new Date(now - 5 * dayMs).toISOString(),
-          updatedAt: new Date(now - 5 * dayMs).toISOString()
-        },
-        {
-          id: 'exp_004',
-          expenseNumber: 'EXP-2026-004',
-          title: 'Thermal POS Receipt Rolls & Shipping Cartons',
-          categoryId: 'cat_packaging',
-          categoryName: 'Packaging & Consumables',
-          amount: 4800,
-          taxAmount: 662,
-          taxDeductible: true,
-          vendorName: 'Stationery & Packaging Hub East Africa',
-          date: new Date(now - 3 * dayMs).toISOString().split('T')[0],
-          paymentMethod: 'Cash',
-          department: 'Operations',
-          status: 'PAID',
-          reference: 'RCP-66102',
-          notes: '50x 80mm thermal receipt rolls + 100 delivery boxes.',
-          paidAt: new Date(now - 3 * dayMs).toISOString(),
-          createdAt: new Date(now - 3 * dayMs).toISOString(),
-          updatedAt: new Date(now - 3 * dayMs).toISOString()
-        },
-        {
-          id: 'exp_005',
-          expenseNumber: 'EXP-2026-005',
-          title: 'Social Media Promotion & Google Local Ads',
-          categoryId: 'cat_marketing',
-          categoryName: 'Marketing & Digital Ads',
-          amount: 12500,
-          taxAmount: 0,
-          taxDeductible: true,
-          vendorName: 'Meta Ads & Google Ireland',
-          date: new Date(now - 2 * dayMs).toISOString().split('T')[0],
-          paymentMethod: 'Credit Card',
-          department: 'Sales & Marketing',
-          status: 'PAID',
-          reference: 'AD-CAMPAIGN-Q1-09',
-          notes: 'Customer acquisition campaign for seasonal retail surge.',
-          paidAt: new Date(now - 2 * dayMs).toISOString(),
-          createdAt: new Date(now - 2 * dayMs).toISOString(),
-          updatedAt: new Date(now - 2 * dayMs).toISOString()
-        },
-        {
-          id: 'exp_006',
-          expenseNumber: 'EXP-2026-006',
-          title: 'Inbound Logistics & Port Clearance Handling',
-          categoryId: 'cat_freight',
-          categoryName: 'Freight, Delivery & Courier',
-          amount: 14200,
-          taxAmount: 1958,
-          taxDeductible: true,
-          vendorName: 'Swift Freights & Clearance Ltd',
-          date: new Date(now - 1 * dayMs).toISOString().split('T')[0],
-          dueDate: new Date(now + 8 * dayMs).toISOString().split('T')[0],
-          paymentMethod: 'Bank Transfer',
-          department: 'Logistics',
-          status: 'PENDING',
-          reference: 'BL-MOM-2026-77',
-          notes: 'Container clearance fees for imported electronics batch. Awaiting director approval.',
-          createdAt: new Date(now - 1 * dayMs).toISOString(),
-          updatedAt: new Date(now - 1 * dayMs).toISOString()
-        },
-        {
-          id: 'exp_007',
-          expenseNumber: 'EXP-2026-007',
-          title: 'Office Cleaning Detergents & Milk Supplies',
-          categoryId: 'cat_office',
-          categoryName: 'Office Supplies & Refreshments',
-          amount: 1850,
-          taxAmount: 0,
-          taxDeductible: true,
-          vendorName: 'Local Supermarket / Petty Cash',
-          date: new Date(now).toISOString().split('T')[0],
-          paymentMethod: 'Petty Cash',
-          department: 'Administration',
-          status: 'PAID',
-          reference: 'PCV-2026-003',
-          pettyCashVoucherId: 'pcv_003',
-          notes: 'Tea, milk, sugar, and disinfectant for the office break room.',
-          paidAt: new Date(now).toISOString(),
-          createdAt: new Date(now).toISOString(),
-          updatedAt: new Date(now).toISOString()
-        }
-      ];
-
-      for (const exp of demoExpenses) {
-        const eRef = doc(db, `companies/${companyId}/expenses`, exp.id!);
-        batch.set(eRef, exp);
-      }
-
-      // Initial Recurring Expenses
-      const demoRecurring: RecurringExpense[] = [
-        {
-          id: 'rec_001',
-          title: 'Main Showroom & Warehouse Lease',
-          categoryId: 'cat_rent',
-          categoryName: 'Facility & Warehouse Rent',
-          amount: 45000,
-          vendorName: 'Prime Commercial Properties Ltd',
-          frequency: 'Monthly',
-          startDate: '2026-01-01',
-          nextDueDate: '2026-04-01',
-          lastLoggedDate: new Date(now - 12 * dayMs).toISOString().split('T')[0],
-          autoLog: true,
-          status: 'ACTIVE',
-          paymentMethod: 'Bank Transfer',
-          department: 'Operations',
-          notes: 'Due on the 1st of every month.',
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'rec_002',
-          title: 'Dedicated Fiber Internet Subscription',
-          categoryId: 'cat_internet',
-          categoryName: 'Internet, SaaS & Telephony',
-          amount: 6500,
-          vendorName: 'Safaricom Business',
-          frequency: 'Monthly',
-          startDate: '2026-01-05',
-          nextDueDate: '2026-04-05',
-          lastLoggedDate: new Date(now - 8 * dayMs).toISOString().split('T')[0],
-          autoLog: true,
-          status: 'ACTIVE',
-          paymentMethod: 'M-Pesa',
-          department: 'IT & Software',
-          notes: 'Direct MPesa Paybill monthly renewal.',
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'rec_003',
-          title: 'Night Security Guard Patrol Services',
-          categoryId: 'cat_salaries',
-          categoryName: 'Staff Wages & Casual Labour',
-          amount: 22000,
-          vendorName: 'ShieldGuard Security Services',
-          frequency: 'Monthly',
-          startDate: '2026-01-10',
-          nextDueDate: '2026-04-10',
-          autoLog: false,
-          status: 'ACTIVE',
-          paymentMethod: 'Bank Transfer',
-          department: 'Operations',
-          notes: '24/7 security guard patrol for warehouse grounds.',
-          createdAt: new Date().toISOString()
-        }
-      ];
-
-      for (const rec of demoRecurring) {
-        const rRef = doc(db, `companies/${companyId}/recurring_expenses`, rec.id);
-        batch.set(rRef, rec);
-      }
 
       // Initial Petty Cash Meta & Ledger
       const floatMetaRef = doc(db, `companies/${companyId}/petty_cash_meta`, 'current_float');
       const floatMeta: PettyCashFloat = {
-        currentBalance: 8150,
+        currentBalance: 0,
         targetFloat: 10000,
-        minimumThreshold: 3000,
-        lastReplenished: new Date(now - 14 * dayMs).toISOString()
+        minimumThreshold: 2000,
+        lastReplenished: new Date().toISOString()
       };
-      batch.set(floatMetaRef, floatMeta);
-
-      const demoPettyCashTx: PettyCashTransaction[] = [
-        {
-          id: 'pcv_001',
-          voucherNumber: 'PCV-2026-001',
-          type: 'TOP_UP',
-          amount: 10000,
-          balanceAfter: 10000,
-          purpose: 'Monthly Petty Cash float replenishment from Main Bank Account',
-          authorizedBy: 'Finance Manager',
-          date: new Date(now - 14 * dayMs).toISOString().split('T')[0],
-          notes: 'Check withdrawal #009183',
-          createdAt: new Date(now - 14 * dayMs).toISOString()
-        },
-        {
-          id: 'pcv_002',
-          voucherNumber: 'PCV-2026-002',
-          type: 'DISBURSEMENT',
-          amount: 0, // placeholder
-          balanceAfter: 10000,
-          recipient: 'John (Courier)',
-          purpose: 'Emergency motorcycle fuel for urgent delivery',
-          categoryId: 'cat_freight',
-          categoryName: 'Freight, Delivery & Courier',
-          authorizedBy: 'Store Supervisor',
-          date: new Date(now - 7 * dayMs).toISOString().split('T')[0],
-          createdAt: new Date(now - 7 * dayMs).toISOString()
-        },
-        {
-          id: 'pcv_003',
-          voucherNumber: 'PCV-2026-003',
-          type: 'DISBURSEMENT',
-          amount: 1850,
-          balanceAfter: 8150,
-          recipient: 'Mary (Office Admin)',
-          purpose: 'Office Cleaning Detergents & Milk Supplies',
-          categoryId: 'cat_office',
-          categoryName: 'Office Supplies & Refreshments',
-          receiptNumber: 'SUP-09923',
-          authorizedBy: 'Store Supervisor',
-          date: new Date(now).toISOString().split('T')[0],
-          notes: 'Attached supermarket receipt',
-          createdAt: new Date(now).toISOString()
-        }
-      ];
-
-      for (const pcv of demoPettyCashTx) {
-        if (pcv.id === 'pcv_002') {
-          pcv.amount = 1200;
-          pcv.balanceAfter = 8800;
-        }
-        if (pcv.id === 'pcv_003') {
-          pcv.amount = 1850;
-          pcv.balanceAfter = 6950;
-        }
-        const pRef = doc(db, `companies/${companyId}/petty_cash_transactions`, pcv.id);
-        batch.set(pRef, pcv);
-      }
+      batch.set(floatMetaRef, floatMeta, { merge: true });
 
       await batch.commit();
-      console.log('Successfully seeded default expense data for company:', companyId);
+      console.log('Successfully initialized expense defaults for company:', companyId);
     }
   } catch (error) {
     console.error('Error ensuring expense defaults:', error);
@@ -733,7 +460,7 @@ export function subscribeToExpenses(
 ): () => void {
   const colRef = collection(db, `companies/${companyId}/expenses`);
   return onSnapshot(colRef, (snapshot) => {
-    const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[];
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Expense[];
     callback(list);
   }, (err) => {
     console.error('Failed to subscribe to expenses:', err);
@@ -747,7 +474,7 @@ export function subscribeToExpenseCategories(
 ): () => void {
   const colRef = collection(db, `companies/${companyId}/expense_categories`);
   return onSnapshot(colRef, (snapshot) => {
-    const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ExpenseCategory[];
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ExpenseCategory[];
     callback(list);
   }, (err) => {
     console.error('Failed to subscribe to expense categories:', err);
@@ -761,7 +488,7 @@ export function subscribeToExpenseBudgets(
 ): () => void {
   const colRef = collection(db, `companies/${companyId}/expense_budgets`);
   return onSnapshot(colRef, (snapshot) => {
-    const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ExpenseBudget[];
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ExpenseBudget[];
     callback(list);
   }, (err) => {
     console.error('Failed to subscribe to expense budgets:', err);
@@ -775,7 +502,7 @@ export function subscribeToRecurringExpenses(
 ): () => void {
   const colRef = collection(db, `companies/${companyId}/recurring_expenses`);
   return onSnapshot(colRef, (snapshot) => {
-    const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as RecurringExpense[];
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as RecurringExpense[];
     callback(list);
   }, (err) => {
     console.error('Failed to subscribe to recurring expenses:', err);
@@ -789,7 +516,7 @@ export function subscribeToPettyCash(
 ): () => void {
   const colRef = collection(db, `companies/${companyId}/petty_cash_transactions`);
   return onSnapshot(colRef, (snapshot) => {
-    const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as PettyCashTransaction[];
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as PettyCashTransaction[];
     callback(list);
   }, (err) => {
     console.error('Failed to subscribe to petty cash transactions:', err);

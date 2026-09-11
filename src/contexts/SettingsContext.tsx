@@ -81,7 +81,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           const companyRef = doc(db, 'companies', userData.companyId);
           const companySnap = await getDoc(companyRef);
           if (companySnap.exists()) {
-            setCompany({ id: companySnap.id, ...companySnap.data() } as Company);
+            setCompany({ ...companySnap.data(), id: companySnap.id } as Company);
           }
         } else {
           setCompany(null);
