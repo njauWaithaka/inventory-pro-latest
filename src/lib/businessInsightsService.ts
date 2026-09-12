@@ -241,11 +241,13 @@ export function calculateGoldenProducts(
 export function calculateProfitInsights(
   products: any[] = [],
   invoices: any[] = [],
-  currency: string = '$'
+  currency: string = '$',
+  expenses: any[] = []
 ): {
   totalRevenue: number;
   totalCOGS: number;
   grossProfit: number;
+  totalExpenses: number;
   netProfit: number;
   grossMarginPercent: number;
   insights: SmartInsight[];
@@ -275,8 +277,13 @@ export function calculateProfitInsights(
   });
 
   const grossProfit = Math.max(0, totalRevenue - totalCOGS);
-  const operatingExpenses = Math.round(totalRevenue * 0.12);
-  const netProfit = grossProfit - operatingExpenses;
+  const totalExpenses = expenses.length > 0
+    ? expenses
+        .filter(exp => exp.status !== 'REJECTED' && exp.status !== 'CANCELLED')
+        .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0)
+    : 0;
+  // Net Profit = Sales Revenue − COGS − Expenses
+  const netProfit = grossProfit - totalExpenses;
   const grossMarginPercent = totalRevenue > 0 ? Math.round((grossProfit / totalRevenue) * 1000) / 10 : 0;
 
   // Derive top 3 profit products contribution
@@ -347,6 +354,7 @@ export function calculateProfitInsights(
     totalRevenue,
     totalCOGS,
     grossProfit,
+    totalExpenses,
     netProfit,
     grossMarginPercent,
     insights

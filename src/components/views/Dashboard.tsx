@@ -27,6 +27,7 @@ import {
   Wrench,
   Loader2,
   CheckCircle2,
+  Receipt,
 } from "lucide-react";
 import { cn, formatCompactNumber, getProductMovementSpeed } from "../../lib/utils";
 import { ABCAnalysisSection } from "./ABCAnalysisSection";
@@ -82,6 +83,7 @@ export function Dashboard({
   const [grns, setGrns] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [creditNotes, setCreditNotes] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
   const [stockMovements, setStockMovements] = useState<any[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
   const [exportNotice, setExportNotice] = useState(false);
@@ -112,6 +114,10 @@ export function Dashboard({
     const creditNotesQuery = collection(
       db,
       `companies/${profile.companyId}/credit_notes`,
+    );
+    const expensesQuery = collection(
+      db,
+      `companies/${profile.companyId}/expenses`,
     );
     const movementsQuery = collection(
       db,
@@ -150,6 +156,10 @@ export function Dashboard({
       setCreditNotes(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
 
+    const unsubscribeExpenses = onSnapshot(expensesQuery, (snapshot) => {
+      setExpenses(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
+    });
+
     const unsubscribeMovements = onSnapshot(movementsQuery, (snapshot) => {
       setStockMovements(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
@@ -171,6 +181,7 @@ export function Dashboard({
       unsubscribeGrns();
       unsubscribeInvoices();
       unsubscribeCreditNotes();
+      unsubscribeExpenses();
       unsubscribeMovements();
     };
   }, [profile?.companyId]);
@@ -217,9 +228,18 @@ export function Dashboard({
       }
     });
 
+    // Real Expenses Calculation: non-cancelled and non-rejected expenses
+    const validExpenses = expenses.filter(
+      (exp) => exp.status !== "REJECTED" && exp.status !== "CANCELLED"
+    );
+    const totalExpenses = validExpenses.reduce(
+      (sum, exp) => sum + (Number(exp.amount) || 0),
+      0
+    );
+
+    // Net Profit = Sales Revenue − COGS − Expenses
     const grossProfit = totalSales - totalCOGS;
-    const operatingExpenses = Math.round(totalSales * 0.12);
-    const netProfit = grossProfit - operatingExpenses;
+    const netProfit = grossProfit - totalExpenses;
     const netMarginPct =
       totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
 
@@ -235,13 +255,17 @@ export function Dashboard({
 
     return {
       totalSales,
+      totalCOGS,
+      grossProfit,
+      totalExpenses,
+      expensesCount: validExpenses.length,
       netProfit,
       netMarginPct,
       salesCount: salesInvoices.length,
       totalUnitsSold,
       sellThroughRate,
     };
-  }, [invoices, products]);
+  }, [invoices, products, expenses]);
 
   const turnoverDateRange = useMemo(() => {
     return getDateRangeForPeriod('This Month');
@@ -443,10 +467,16 @@ export function Dashboard({
     const rows = [
       ["Metric", "Value"],
       ["Total Inventory Value", `${currency}${totalCapital.toFixed(2)}`],
+      ["Total Sales (Turnover)", `${currency}${salesMetrics.totalSales.toFixed(2)}`],
+      ["Cost of Goods Sold (COGS)", `${currency}${salesMetrics.totalCOGS.toFixed(2)}`],
+      ["Gross Profit (Sales - COGS)", `${currency}${salesMetrics.grossProfit.toFixed(2)}`],
+      ["Total Expenses", `${currency}${salesMetrics.totalExpenses.toFixed(2)}`],
+      ["Net Profit (Sales - COGS - Expenses)", `${currency}${salesMetrics.netProfit.toFixed(2)}`],
+      ["Net Margin %", `${salesMetrics.netMarginPct.toFixed(1)}%`],
+      ["Turnover Ratio", turnoverStats.overallRatio.toFixed(2)],
       ["Total Active SKUs", totalSKUs.toString()],
       ["Low Stock Alerts", lowStockCount.toString()],
       ["Active System Alerts", activeAlertsCount.toString()],
-      ["Turnover Ratio", turnoverRatioData.currentTurnover.toFixed(2)],
       [],
       ["Top Products by Tied-Up Capital", "Category", "Quantity", "Unit Cost", "Total Value"],
       ...allProducts.slice(0, 50).map(p => [
@@ -518,7 +548,7 @@ export function Dashboard({
         </div>
 
         {/* Top Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 min-w-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6 min-w-0">
           <SummaryCard
             title="Inventory Total"
             value={`${currency}${totalCapital.toLocaleString()}`}
@@ -543,12 +573,24 @@ export function Dashboard({
             badgeText="VELOCITY"
           />
           <SummaryCard
+            title="Expenses"
+            value={`${currency}${Math.round(salesMetrics.totalExpenses).toLocaleString()}`}
+            subtitle={`${salesMetrics.expensesCount} recorded expenses`}
+            icon={Receipt}
+            gradient="from-[#E11D48] to-[#9F1239]"
+            badgeText="EXPENSES"
+            onClick={() => onNavigate?.('expenses')}
+          />
+          <SummaryCard
             title="Net Profit"
-            value={`${currency}${Math.round(salesMetrics.netProfit).toLocaleString()}`}
+            value={salesMetrics.netProfit < 0
+              ? `-${currency}${Math.abs(Math.round(salesMetrics.netProfit)).toLocaleString()}`
+              : `${currency}${Math.round(salesMetrics.netProfit).toLocaleString()}`}
             subtitle={`${salesMetrics.netMarginPct.toFixed(1)}% net margin`}
             icon={TrendingUp}
-            gradient="from-[#10B981] to-[#047857]"
-            badgeText="NET MARGIN"
+            gradient={salesMetrics.netProfit < 0 ? "from-red-600 to-rose-700" : "from-[#10B981] to-[#047857]"}
+            isNegative={salesMetrics.netProfit < 0}
+            badgeText={salesMetrics.netProfit < 0 ? "DEFICIT" : "NET MARGIN"}
           />
         </div>
 
@@ -889,37 +931,60 @@ function SummaryCard({
   icon: Icon,
   gradient,
   badgeText,
+  onClick,
+  isNegative,
+  valueClassName,
 }: any) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 15 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
+      onClick={onClick}
       className={cn(
-        "relative rounded-xl p-4 sm:p-6 min-h-[125px] overflow-hidden shadow-sm flex flex-col justify-between text-left min-w-0",
-        "bg-gradient-to-br",
-        gradient,
+        "relative rounded-xl p-4 sm:p-6 min-h-[125px] overflow-hidden shadow-sm flex flex-col justify-between text-left min-w-0 transition-all",
+        isNegative
+          ? "bg-rose-50/90 border-2 border-rose-300/90 shadow-rose-100"
+          : cn("bg-gradient-to-br", gradient),
+        onClick && "cursor-pointer hover:shadow-md transition-shadow active:scale-[0.99]"
       )}
     >
       <div className="flex justify-between items-start gap-2 min-w-0">
         <div className="space-y-1 min-w-0">
-          <p className="text-[11px] sm:text-[13px] font-semibold text-white/80 uppercase tracking-widest truncate">
+          <p className={cn(
+            "text-[11px] sm:text-[13px] font-semibold uppercase tracking-widest truncate",
+            isNegative ? "text-rose-700 font-bold" : "text-white/80"
+          )}>
             {title}
           </p>
           <div className="flex items-center gap-2 min-w-0">
-            <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">
+            <h3 className={cn(
+              "text-xl sm:text-2xl font-extrabold tracking-tight truncate",
+              isNegative ? "text-red-600 font-black" : (valueClassName || "text-white")
+            )}>
               {value}
             </h3>
           </div>
         </div>
-        <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/10 shrink-0">
-          <Icon className="w-5 h-5 text-white" />
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center border shrink-0",
+          isNegative
+            ? "bg-rose-100 border-rose-200 text-red-600"
+            : "bg-white/20 backdrop-blur-md border-white/10 text-white"
+        )}>
+          <Icon className="w-5 h-5" />
         </div>
       </div>
       <div className="flex items-center justify-between mt-4 gap-2 min-w-0">
-        <p className="text-[11px] sm:text-[13px] text-white/60 font-medium truncate">{subtitle}</p>
+        <p className={cn(
+          "text-[11px] sm:text-[13px] font-medium truncate",
+          isNegative ? "text-rose-600/90 font-bold" : "text-white/60"
+        )}>{subtitle}</p>
         {badgeText && (
-          <span className="px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-black text-white tracking-widest backdrop-blur-sm shrink-0">
+          <span className={cn(
+            "px-2 py-0.5 rounded-full text-[9px] font-black tracking-widest shrink-0",
+            isNegative ? "bg-red-100 border border-red-200 text-red-800" : "bg-white/20 text-white backdrop-blur-sm"
+          )}>
             {badgeText}
           </span>
         )}
@@ -936,6 +1001,8 @@ function WhiteMetricCard({
   change,
   variant,
   gradient,
+  isNegative,
+  valueClassName,
 }: any) {
   if (gradient) {
     return (
@@ -945,42 +1012,64 @@ function WhiteMetricCard({
         subtitle={subtitle}
         icon={Icon}
         gradient={gradient}
+        isNegative={isNegative}
+        valueClassName={valueClassName}
       />
     );
   }
 
   return (
-    <div className="bg-white border border-[#DDE5F0] rounded-xl p-6 min-h-[125px] shadow-sm flex flex-col justify-between text-left transition-all hover:border-slate-300 group">
+    <div className={cn(
+      "border rounded-xl p-6 min-h-[125px] shadow-sm flex flex-col justify-between text-left transition-all hover:border-slate-300 group",
+      isNegative ? "bg-rose-50/60 border-rose-200" : "bg-white border-[#DDE5F0]"
+    )}>
       <div className="flex justify-between items-start">
         <div className="space-y-1">
-          <p className="text-[13px] font-semibold text-[#526789] uppercase tracking-widest leading-none">
+          <p className={cn(
+            "text-[13px] font-semibold uppercase tracking-widest leading-none",
+            isNegative ? "text-rose-700" : "text-[#526789]"
+          )}>
             {title}
           </p>
           <div className="flex items-center gap-2">
-            <h3 className="text-2xl font-extrabold text-[#06132B] tracking-tight">
+            <h3 className={cn(
+              "text-2xl font-extrabold tracking-tight",
+              isNegative ? "text-red-600 font-black" : (valueClassName || "text-[#06132B]")
+            )}>
               {value}
             </h3>
             {change && (
-              <span className="text-[12px] font-bold text-[#10B981]">
+              <span className={cn(
+                "text-[12px] font-bold",
+                isNegative ? "text-red-600" : "text-[#10B981]"
+              )}>
                 {change}
               </span>
             )}
           </div>
         </div>
-        <div className="w-10 h-10 rounded-xl bg-[#F1F5F9] flex items-center justify-center border border-slate-100 group-hover:bg-slate-50 transition-colors">
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center border transition-colors",
+          isNegative ? "bg-rose-100 border-rose-200 text-red-600" : "bg-[#F1F5F9] border-slate-100 group-hover:bg-slate-50"
+        )}>
           <Icon
             className={cn(
               "w-5 h-5",
-              variant === "warning"
-                ? "text-[#F59E0B]"
-                : variant === "success"
-                  ? "text-[#10B981]"
-                  : "text-[#526789]",
+              isNegative
+                ? "text-red-600"
+                : variant === "warning"
+                  ? "text-[#F59E0B]"
+                  : variant === "success"
+                    ? "text-[#10B981]"
+                    : "text-[#526789]",
             )}
           />
         </div>
       </div>
-      <p className="text-[13px] text-[#526789] font-medium leading-none">
+      <p className={cn(
+        "text-[13px] font-medium leading-none",
+        isNegative ? "text-rose-600/90 font-bold" : "text-[#526789]"
+      )}>
         {subtitle}
       </p>
     </div>

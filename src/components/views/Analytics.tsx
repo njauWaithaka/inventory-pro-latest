@@ -52,9 +52,11 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
   const [products, setProducts] = useState<any[]>([]);
   const [stockMovements, setStockMovements] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
   const [movementsLoaded, setMovementsLoaded] = useState(false);
   const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+  const [expensesLoaded, setExpensesLoaded] = useState(false);
 
   // Filter States
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('This Month');
@@ -97,12 +99,13 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
 
     csv += `EXECUTIVE FINANCIAL & OPERATIONAL KPIS\n`;
     csv += `Metric,Value,Unit\n`;
-    csv += `Total Revenue,${comprehensiveAnalytics.revenue.toFixed(2)},${currency}\n`;
-    csv += `Cost of Goods Sold (COGS),${comprehensiveAnalytics.cogs.toFixed(2)},${currency}\n`;
-    csv += `Gross Profit,${comprehensiveAnalytics.grossProfit.toFixed(2)},${currency}\n`;
-    csv += `Gross Margin,${comprehensiveAnalytics.grossProfitMargin.toFixed(1)},%\n`;
-    csv += `Estimated Net Profit,${comprehensiveAnalytics.netProfit.toFixed(2)},${currency}\n`;
-    csv += `Operating Profit Margin,${comprehensiveAnalytics.operatingProfitMargin.toFixed(1)},%\n`;
+    csv += `Total Sales Revenue,${comprehensiveAnalytics.salesComparison.current.toFixed(2)},${currency}\n`;
+    csv += `Cost of Goods Sold (COGS),${comprehensiveAnalytics.cogsComparison.current.toFixed(2)},${currency}\n`;
+    csv += `Gross Profit (Revenue - COGS),${comprehensiveAnalytics.grossProfitComparison.current.toFixed(2)},${currency}\n`;
+    csv += `Gross Margin,${comprehensiveAnalytics.grossMarginPctComparison.current.toFixed(1)},%\n`;
+    csv += `Total Expenses,${(comprehensiveAnalytics.expensesComparison?.current ?? 0).toFixed(2)},${currency}\n`;
+    csv += `Net Profit (Revenue - COGS - Expenses),${comprehensiveAnalytics.netProfitComparison.current.toFixed(2)},${currency}\n`;
+    csv += `Net Profit Margin,${comprehensiveAnalytics.netMarginPctComparison.current.toFixed(1)},%\n`;
     csv += `Total Inventory Holding Value,${comprehensiveAnalytics.totalInventoryValue.toFixed(2)},${currency}\n`;
     csv += `Total Stock Units on Hand,${comprehensiveAnalytics.totalUnitsOnHand},Units\n`;
     csv += `Stock Turnover Ratio,${comprehensiveAnalytics.overallTurnoverRatio.toFixed(2)},x / period\n`;
@@ -228,26 +231,35 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
           </div>
         </div>
 
-        <div class="grid">
+        <div class="grid" style="grid-template-columns: repeat(5, 1fr);">
           <div class="card">
-            <div class="card-label">Total Revenue</div>
-            <div class="card-val">${currency}${comprehensiveAnalytics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            <div class="card-sub">Margin: ${comprehensiveAnalytics.grossProfitMargin.toFixed(1)}%</div>
+            <div class="card-label">Sales Revenue</div>
+            <div class="card-val">${currency}${comprehensiveAnalytics.salesComparison.current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div class="card-sub">Margin: ${comprehensiveAnalytics.grossMarginPctComparison.current.toFixed(1)}%</div>
           </div>
           <div class="card">
-            <div class="card-label">Gross Profit</div>
-            <div class="card-val">${currency}${comprehensiveAnalytics.grossProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            <div class="card-sub">Net Est: ${currency}${comprehensiveAnalytics.netProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div class="card-label">COGS</div>
+            <div class="card-val">${currency}${comprehensiveAnalytics.cogsComparison.current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div class="card-sub" style="color: #64748b;">Direct product cost</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Expenses</div>
+            <div class="card-val" style="color: #e11d48;">${currency}${(comprehensiveAnalytics.expensesComparison?.current ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div class="card-sub" style="color: #e11d48;">Operating expenses</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Net Profit</div>
+            <div class="card-val" style="color: ${comprehensiveAnalytics.netProfitComparison.current < 0 ? '#ef4444' : '#10b981'};">
+              ${comprehensiveAnalytics.netProfitComparison.current < 0 ? '-' : ''}${currency}${Math.abs(comprehensiveAnalytics.netProfitComparison.current).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div class="card-sub" style="${comprehensiveAnalytics.netMarginPctComparison.current < 0 ? 'color: #ef4444;' : ''}">
+              Net Margin: ${comprehensiveAnalytics.netMarginPctComparison.current.toFixed(1)}%
+            </div>
           </div>
           <div class="card">
             <div class="card-label">Inventory Valuation</div>
             <div class="card-val">${currency}${comprehensiveAnalytics.totalInventoryValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             <div class="card-sub" style="color: #64748b;">${comprehensiveAnalytics.totalUnitsOnHand.toLocaleString()} units on hand</div>
-          </div>
-          <div class="card">
-            <div class="card-label">Sell-Through Rate</div>
-            <div class="card-val">${comprehensiveAnalytics.overallSellThroughRate.toFixed(1)}%</div>
-            <div class="card-sub">Turnover: ${comprehensiveAnalytics.overallTurnoverRatio.toFixed(2)}x</div>
           </div>
         </div>
 
@@ -385,14 +397,24 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
       setInvoicesLoaded(true);
     });
 
+    const expQuery = collection(db, `companies/${profile.companyId}/expenses`);
+    const unsubscribeExpenses = onSnapshot(expQuery, (snapshot) => {
+      setExpenses(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      setExpensesLoaded(true);
+    }, (error) => {
+      console.error("Query error in Analytics expenses:", error);
+      setExpensesLoaded(true);
+    });
+
     return () => {
       unsubscribeProducts();
       unsubscribeMovements();
       unsubscribeInvoices();
+      unsubscribeExpenses();
     };
   }, [profile?.companyId]);
 
-  const loading = !productsLoaded || !movementsLoaded || !invoicesLoaded;
+  const loading = !productsLoaded || !movementsLoaded || !invoicesLoaded || !expensesLoaded;
 
   // Custom range memo
   const customRange = useMemo(() => {
@@ -416,9 +438,10 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
       stockMovements,
       selectedPeriod,
       customRange,
-      currency
+      currency,
+      expenses
     );
-  }, [products, invoices, stockMovements, selectedPeriod, customRange, currency]);
+  }, [products, invoices, stockMovements, selectedPeriod, customRange, currency, expenses]);
 
   // Overall statistics memo
   const overallStats = useMemo(() => {
@@ -445,7 +468,7 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
   }, 0);
   const averageSTR = totalUnitsReceived > 0 ? (totalUnitsSold / totalUnitsReceived) * 100 : 0;
 
-  // Calculate Sales, Gross Profit, and Net Profit from Invoices
+  // Calculate Sales, Gross Profit, and Net Profit from Invoices & Actual Expenses
   const salesMetrics = useMemo(() => {
     const salesInvoices = invoices.filter(inv => inv.type === 'standard' || !inv.type);
     
@@ -485,12 +508,25 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
       }
     });
 
-    const grossProfit = totalSales - totalCOGS;
-    const operatingExpenses = Math.round(totalSales * 0.12);
-    const netProfit = grossProfit - operatingExpenses;
+    // Actual Expenses in Period
+    const filteredExpenses = expenses.filter(exp => {
+      if (exp.status === 'REJECTED' || exp.status === 'CANCELLED') return false;
+      const expDateStr = exp.date || exp.createdAt;
+      if (!expDateStr) return true;
+      const expDate = new Date(expDateStr);
+      if (isNaN(expDate.getTime())) return true;
+      if (dateRange?.start && expDate < dateRange.start) return false;
+      if (dateRange?.end && expDate > dateRange.end) return false;
+      return true;
+    });
+    const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
 
-    return { totalSales, grossProfit, netProfit };
-  }, [invoices, products, dateRange]);
+    // Net Profit = Sales Revenue − COGS − Expenses
+    const grossProfit = totalSales - totalCOGS;
+    const netProfit = grossProfit - totalExpenses;
+
+    return { totalSales, totalCOGS, grossProfit, totalExpenses, netProfit };
+  }, [invoices, products, expenses, dateRange]);
 
   // Overall/Average Turnover value for the stat card
   const overallTurnover = overallStats.overallRatio;

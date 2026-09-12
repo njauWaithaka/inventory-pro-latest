@@ -52,6 +52,7 @@ export interface ComprehensiveAnalyticsResult {
   cogsComparison: PeriodComparison;
   grossProfitComparison: PeriodComparison;
   grossMarginPctComparison: PeriodComparison;
+  expensesComparison: PeriodComparison;
   netProfitComparison: PeriodComparison;
   netMarginPctComparison: PeriodComparison;
 
@@ -177,7 +178,8 @@ export function calculateComprehensiveAnalytics(
   stockMovements: any[] = [],
   selectedPeriod: TimePeriod = 'This Month',
   customRange?: { start: Date; end: Date },
-  currency: string = 'KSh'
+  currency: string = 'KSh',
+  expenses: any[] = []
 ): ComprehensiveAnalyticsResult {
   // 1. Resolve current and prior date ranges
   const now = new Date();
@@ -287,12 +289,9 @@ export function calculateComprehensiveAnalytics(
     }
 
     const grossProfit = sales - cogs;
-    const operatingExpenses = Math.round(sales * 0.12);
-    const netProfit = grossProfit - operatingExpenses;
     const grossMarginPct = sales > 0 ? (grossProfit / sales) * 100 : 0;
-    const netMarginPct = sales > 0 ? (netProfit / sales) * 100 : 0;
 
-    return { sales, cogs, grossProfit, grossMarginPct, netProfit, netMarginPct, unitsSold, prodSalesMap };
+    return { sales, cogs, grossProfit, grossMarginPct, unitsSold, prodSalesMap };
   };
 
   const currFin = computeInvoiceFinancials(currentInvoices);
@@ -305,12 +304,37 @@ export function calculateComprehensiveAnalytics(
     return { current: parseFloat(current.toFixed(2)), prior: parseFloat(prior.toFixed(2)), delta: parseFloat(delta.toFixed(2)), pctChange };
   };
 
+  // Filter actual expenses for current and prior periods (excluding cancelled and rejected)
+  const getExpensesInRange = (start: Date, end: Date) => {
+    return expenses.filter(exp => {
+      if (exp.status === 'REJECTED' || exp.status === 'CANCELLED') return false;
+      const expDateStr = exp.date || exp.createdAt;
+      if (!expDateStr) return false;
+      const t = new Date(expDateStr).getTime();
+      return t >= start.getTime() && t <= end.getTime();
+    });
+  };
+
+  const currentExpenses = getExpensesInRange(currentStart, currentEnd);
+  const priorExpenses = getExpensesInRange(priorRange.start, priorRange.end);
+
+  const currExpensesTotal = currentExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+  const priorExpensesTotal = priorExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+
+  // Net Profit = Sales Revenue − COGS − Expenses
+  const currNetProfit = currFin.grossProfit - currExpensesTotal;
+  const currNetMarginPct = currFin.sales > 0 ? (currNetProfit / currFin.sales) * 100 : 0;
+
+  const priorNetProfit = priorFin.grossProfit - priorExpensesTotal;
+  const priorNetMarginPct = priorFin.sales > 0 ? (priorNetProfit / priorFin.sales) * 100 : 0;
+
   const salesComparison = makeComparison(currFin.sales, priorFin.sales);
   const cogsComparison = makeComparison(currFin.cogs, priorFin.cogs);
   const grossProfitComparison = makeComparison(currFin.grossProfit, priorFin.grossProfit);
   const grossMarginPctComparison = makeComparison(currFin.grossMarginPct, priorFin.grossMarginPct);
-  const netProfitComparison = makeComparison(currFin.netProfit, priorFin.netProfit);
-  const netMarginPctComparison = makeComparison(currFin.netMarginPct, priorFin.netMarginPct);
+  const expensesComparison = makeComparison(currExpensesTotal, priorExpensesTotal);
+  const netProfitComparison = makeComparison(currNetProfit, priorNetProfit);
+  const netMarginPctComparison = makeComparison(currNetMarginPct, priorNetMarginPct);
 
   // 3. Inventory Valuation
   const totalInventoryUnits = products.reduce((sum, p) => sum + getProductCurrentStock(p), 0);
@@ -823,6 +847,7 @@ export function calculateComprehensiveAnalytics(
     cogsComparison,
     grossProfitComparison,
     grossMarginPctComparison,
+    expensesComparison,
     netProfitComparison,
     netMarginPctComparison,
     stockAtRiskCount,

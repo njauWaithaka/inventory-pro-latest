@@ -25,6 +25,7 @@ export function Demand() {
   const [products, setProducts] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Global Interactive Filters
@@ -57,6 +58,9 @@ export function Demand() {
       }),
       onSnapshot(collection(db, `${basePath}/purchaseOrders`), (snap) => {
         setPurchaseOrders(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+      }),
+      onSnapshot(collection(db, `${basePath}/expenses`), (snap) => {
+        setExpenses(snap.docs.map(d => ({ ...d.data(), id: d.id })));
       })
     ];
 
@@ -222,8 +226,11 @@ export function Demand() {
 
     const demandGrossProfit = totalDemandSales - totalDemandCOGS;
     const demandGrossMarginPct = totalDemandSales > 0 ? (demandGrossProfit / totalDemandSales) * 100 : 0;
-    const demandOperatingExpenses = Math.round(totalDemandSales * 0.12);
-    const demandNetProfit = demandGrossProfit - demandOperatingExpenses;
+    const totalExpenses = expenses
+      .filter(exp => exp.status !== 'REJECTED' && exp.status !== 'CANCELLED')
+      .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+    // Net Profit = Sales Revenue − COGS − Expenses
+    const demandNetProfit = demandGrossProfit - totalExpenses;
     const demandNetMarginPct = totalDemandSales > 0 ? (demandNetProfit / totalDemandSales) * 100 : 0;
 
     // Dynamic Velocity and Stock Coverage

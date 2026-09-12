@@ -7,7 +7,8 @@ import { motion } from 'motion/react';
 import { 
   TrendingUp, TrendingDown, DollarSign, Package, BarChart3, ArrowRight, 
   Coins, Download, Sparkles, Sliders, Percent, ShieldCheck, Scale, 
-  ChevronRight, Filter, Layers, ListFilter, HelpCircle, AlertTriangle 
+  ChevronRight, Filter, Layers, ListFilter, HelpCircle, AlertTriangle,
+  Receipt
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -33,6 +34,7 @@ export function ProfitTracking() {
   const [dbProducts, setDbProducts] = useState<any[]>([]);
   const [dbInvoices, setDbInvoices] = useState<any[]>([]);
   const [dbStockMovements, setDbStockMovements] = useState<any[]>([]);
+  const [dbExpenses, setDbExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Controls
@@ -44,7 +46,7 @@ export function ProfitTracking() {
   const [costReduction, setCostReduction] = useState<number>(0); // percentage change: -30% to +10%
   const [volumeAdjustment, setVolumeAdjustment] = useState<number>(0); // percentage change: -20% to +50%
 
-  // Pull products, invoices, and stock movements from Firestore
+  // Pull products, invoices, stock movements, and expenses from Firestore
   useEffect(() => {
     if (!profile?.companyId) {
       setLoading(false);
@@ -76,6 +78,17 @@ export function ProfitTracking() {
       }
     );
 
+    const expensesPath = `companies/${profile.companyId}/expenses`;
+    const unsubscribeExpenses = onSnapshot(
+      collection(db, expensesPath),
+      (snapshot) => {
+        setDbExpenses(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
+      },
+      (error) => {
+        console.error("Error loading expenses for profit tracking:", error);
+      }
+    );
+
     const movementsPath = `companies/${profile.companyId}/stockMovements`;
     const unsubscribeMovements = onSnapshot(
       collection(db, movementsPath),
@@ -92,6 +105,7 @@ export function ProfitTracking() {
     return () => {
       unsubscribe();
       unsubscribeInvoices();
+      unsubscribeExpenses();
       unsubscribeMovements();
     };
   }, [profile?.companyId]);
@@ -165,9 +179,17 @@ export function ProfitTracking() {
       totalCOGS += cogsVal;
     });
 
+    const validExpenses = dbExpenses.filter(
+      (exp) => exp.status !== 'REJECTED' && exp.status !== 'CANCELLED'
+    );
+    const totalExpenses = validExpenses.reduce(
+      (sum, exp) => sum + (Number(exp.amount) || 0),
+      0
+    );
+
     const totalGrossProfit = totalRevenue - totalCOGS;
-    const operatingExpenses = Math.round(totalRevenue * 0.12); // Standard 12% operating expenses overhead (salaries, storage)
-    const totalNetProfit = totalGrossProfit - operatingExpenses;
+    // Net Profit = Sales Revenue − COGS − Expenses
+    const totalNetProfit = totalGrossProfit - totalExpenses;
     const grossMarginPct = totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : 0;
     const netMarginPct = totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0;
 
@@ -175,12 +197,13 @@ export function ProfitTracking() {
       totalRevenue,
       totalCOGS,
       totalGrossProfit,
-      operatingExpenses,
+      totalExpenses,
+      expensesCount: validExpenses.length,
       totalNetProfit,
       grossMarginPct,
       netMarginPct
     };
-  }, [productMargins]);
+  }, [productMargins, dbExpenses]);
 
   // Aggregates for Simulated pricing model
   const simulatedAggregates = useMemo(() => {
@@ -202,8 +225,7 @@ export function ProfitTracking() {
     });
 
     const totalGrossProfit = totalRevenue - totalCOGS;
-    const operatingExpenses = Math.round(totalRevenue * 0.12);
-    const totalNetProfit = totalGrossProfit - operatingExpenses;
+    const totalNetProfit = totalGrossProfit - aggregates.totalExpenses;
     const grossMarginPct = totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : 0;
     const netMarginPct = totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0;
 
@@ -211,12 +233,12 @@ export function ProfitTracking() {
       totalRevenue: Math.max(0, Math.round(totalRevenue)),
       totalCOGS: Math.max(0, Math.round(totalCOGS)),
       totalGrossProfit: Math.max(0, Math.round(totalGrossProfit)),
-      operatingExpenses: Math.max(0, Math.round(operatingExpenses)),
+      totalExpenses: aggregates.totalExpenses,
       totalNetProfit: Math.round(totalNetProfit),
       grossMarginPct: Math.min(100, Math.max(0, grossMarginPct)),
       netMarginPct: Math.min(100, Math.max(-100, netMarginPct))
     };
-  }, [productMargins, priceAdjustment, costReduction, volumeAdjustment]);
+  }, [productMargins, priceAdjustment, costReduction, volumeAdjustment, aggregates.totalExpenses]);
 
   // Category visual breakdown data (with simulated vs original calculations)
   const categoryChartData = useMemo(() => {
@@ -283,14 +305,14 @@ export function ProfitTracking() {
       const stepRevenue = Math.round((aggregates.totalRevenue / days) * scale);
       const stepCOGS = Math.round((aggregates.totalCOGS / days) * (scale * 0.98));
       const stepGrossProfit = stepRevenue - stepCOGS;
-      const stepExpense = Math.round(stepRevenue * 0.12);
+      const stepExpense = Math.round((aggregates.totalExpenses / days) * scale);
       const stepNetProfit = stepGrossProfit - stepExpense;
       const stepMarginPct = Math.round(stepRevenue > 0 ? (stepNetProfit / stepRevenue) * 100 : 0);
 
       const simRevenue = Math.round((simulatedAggregates.totalRevenue / days) * scale);
       const simCOGS = Math.round((simulatedAggregates.totalCOGS / days) * (scale * 0.98));
       const simGrossProfit = simRevenue - simCOGS;
-      const simExpense = Math.round(simRevenue * 0.12);
+      const simExpense = Math.round((simulatedAggregates.totalExpenses / days) * scale);
       const simNetProfit = simGrossProfit - simExpense;
       const simMarginPct = Math.round(simRevenue > 0 ? (simNetProfit / simRevenue) * 100 : 0);
 
@@ -313,12 +335,17 @@ export function ProfitTracking() {
   // Compact currency display helper
   const formatCurrency = (val: number) => {
     const symbol = currency || "KSh";
-    if (Math.abs(val) >= 1000000) {
-      return `${symbol} ${(val / 1000000).toFixed(1)}M`;
-    } else if (Math.abs(val) >= 1000) {
-      return `${symbol} ${(val / 1000).toFixed(1)}k`;
+    const isNeg = val < 0;
+    const absVal = Math.abs(val);
+    let formatted = "";
+    if (absVal >= 1000000) {
+      formatted = `${(absVal / 1000000).toFixed(1)}M`;
+    } else if (absVal >= 1000) {
+      formatted = `${(absVal / 1000).toFixed(1)}k`;
+    } else {
+      formatted = absVal.toLocaleString();
     }
-    return `${symbol} ${val.toLocaleString()}`;
+    return isNeg ? `-${symbol} ${formatted}` : `${symbol} ${formatted}`;
   };
 
   const handleExportProfitReport = () => {
@@ -329,10 +356,10 @@ export function ProfitTracking() {
       ["Financial KPI Metric", "Amount (Currency)"],
       ["Gross Sales Revenue", aggregates.totalRevenue.toFixed(2)],
       ["Cost of Goods Sold (COGS)", aggregates.totalCOGS.toFixed(2)],
-      ["Gross Profit", aggregates.totalGrossProfit.toFixed(2)],
+      ["Gross Profit (Revenue - COGS)", aggregates.totalGrossProfit.toFixed(2)],
       ["Gross Margin %", `${aggregates.grossMarginPct.toFixed(2)}%`],
-      ["Operating Expenses (Estimated)", aggregates.operatingExpenses.toFixed(2)],
-      ["Net Operating Profit", aggregates.totalNetProfit.toFixed(2)],
+      ["Total Expenses", aggregates.totalExpenses.toFixed(2)],
+      ["Net Operating Profit (Revenue - COGS - Expenses)", aggregates.totalNetProfit.toFixed(2)],
       ["Net Margin %", `${aggregates.netMarginPct.toFixed(2)}%`],
       [],
       ["Product SKU", "Product Name", "Category", "Sales Volume", "Unit Buying Price", "Unit Selling Price", "Gross Revenue", "Gross Profit", "Margin %"],
@@ -420,7 +447,7 @@ export function ProfitTracking() {
         className="w-full"
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* KPI 1: Gross Sales */}
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
@@ -463,17 +490,53 @@ export function ProfitTracking() {
           </div>
         </div>
 
-        {/* KPI 3: Net Profit */}
-        <div className={`p-5 rounded-3xl border shadow-sm flex flex-col justify-between transition-all ${simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit ? 'bg-emerald-50/20 border-emerald-100' : 'bg-red-50/25 border-red-100'}`}>
+        {/* KPI 3: Total Expenses */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest block">Net Operating Profit</span>
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest block">Total Expenses</span>
+            <div className="w-8 h-8 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600">
+              <Receipt className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-rose-600">{formatCurrency(aggregates.totalExpenses)}</span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium mt-1">{aggregates.expensesCount} expenses recorded</p>
+          </div>
+        </div>
+
+        {/* KPI 4: Net Profit */}
+        <div className={`p-5 rounded-3xl border shadow-sm flex flex-col justify-between transition-all ${
+          simulatedAggregates.totalNetProfit < 0
+            ? 'bg-rose-50/70 border-rose-200'
+            : simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit
+              ? 'bg-emerald-50/20 border-emerald-100'
+              : 'bg-amber-50/25 border-amber-100'
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest block ${
+              simulatedAggregates.totalNetProfit < 0 ? 'text-rose-700' : 'text-slate-500'
+            }`}>
+              Net Operating Profit
+            </span>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+              simulatedAggregates.totalNetProfit < 0
+                ? 'bg-rose-100 text-rose-700'
+                : simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-amber-100 text-amber-700'
+            }`}>
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-slate-900">{formatCurrency(simulatedAggregates.totalNetProfit)}</span>
+              <span className={`text-2xl sm:text-3xl font-black ${
+                simulatedAggregates.totalNetProfit < 0 ? 'text-red-600' : 'text-slate-900'
+              }`}>
+                {formatCurrency(simulatedAggregates.totalNetProfit)}
+              </span>
               {profitChange !== 0 && (
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-0.5 ${isProfitPositive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                   {isProfitPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -481,11 +544,15 @@ export function ProfitTracking() {
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-slate-500 font-medium mt-1">Normal baseline: <span className="font-semibold">{formatCurrency(aggregates.totalNetProfit)}</span></p>
+            <p className="text-[10px] text-slate-500 font-medium mt-1" title="Net Profit = Sales Revenue − COGS − Expenses">
+              Normal baseline: <span className={`font-semibold ${aggregates.totalNetProfit < 0 ? 'text-red-600' : 'text-slate-700'}`}>
+                {formatCurrency(aggregates.totalNetProfit)}
+              </span>
+            </p>
           </div>
         </div>
 
-        {/* KPI 4: Operating Profit Margin */}
+        {/* KPI 5: Operating Profit Margin */}
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest block">Net Profit Margin %</span>
@@ -495,7 +562,11 @@ export function ProfitTracking() {
           </div>
           <div className="mt-4">
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-slate-900">{simulatedAggregates.netMarginPct.toFixed(1)}%</span>
+              <span className={`text-2xl sm:text-3xl font-black ${
+                simulatedAggregates.netMarginPct < 0 ? 'text-red-600' : 'text-slate-900'
+              }`}>
+                {simulatedAggregates.netMarginPct.toFixed(1)}%
+              </span>
               <span className="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg">Target: 22%</span>
             </div>
             {/* Simple progress track */}
@@ -651,7 +722,13 @@ export function ProfitTracking() {
             <div className="grid grid-cols-2 gap-3 mt-3">
               <div className="p-3 bg-slate-800/50 rounded-2xl">
                 <span className="text-[9px] text-slate-400 font-bold block uppercase">Net Profit Result</span>
-                <span className={`text-base font-black ${simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
+                <span className={`text-base font-black ${
+                  simulatedAggregates.totalNetProfit < 0 
+                    ? 'text-rose-400' 
+                    : simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit 
+                      ? 'text-emerald-400' 
+                      : 'text-amber-400'
+                }`}>
                   {formatCurrency(simulatedAggregates.totalNetProfit)}
                 </span>
               </div>
@@ -861,9 +938,19 @@ export function ProfitTracking() {
                         <span className="text-[10px] text-slate-400 block font-normal">Original: {p.volume}</span>
                       )}
                     </td>
-                    <td className="px-8 py-4 text-right text-sm font-black text-slate-900 font-mono">
-                      {currency}{Math.round(simProductProfit).toLocaleString()}
-                      <span className="text-[10px] text-slate-400 block font-normal">Base: {currency}{Math.round((p.sellingPrice - p.costOfGoods) * p.volume).toLocaleString()}</span>
+                    <td className={`px-8 py-4 text-right text-sm font-black font-mono ${
+                      simProductProfit < 0 ? 'text-red-600' : 'text-slate-900'
+                    }`}>
+                      {simProductProfit < 0
+                        ? `-${currency}${Math.abs(Math.round(simProductProfit)).toLocaleString()}`
+                        : `${currency}${Math.round(simProductProfit).toLocaleString()}`}
+                      <span className={`text-[10px] block font-normal ${
+                        (p.sellingPrice - p.costOfGoods) * p.volume < 0 ? 'text-red-500' : 'text-slate-400'
+                      }`}>
+                        Base: {(p.sellingPrice - p.costOfGoods) * p.volume < 0
+                          ? `-${currency}${Math.abs(Math.round((p.sellingPrice - p.costOfGoods) * p.volume)).toLocaleString()}`
+                          : `${currency}${Math.round((p.sellingPrice - p.costOfGoods) * p.volume).toLocaleString()}`}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -909,7 +996,13 @@ export function ProfitTracking() {
 
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-slate-400 font-semibold">Net Profit Contribution:</span>
-                  <span className="font-black text-slate-900 text-sm font-mono">{currency}{Math.round(simProductProfit).toLocaleString()}</span>
+                  <span className={`font-black text-sm font-mono ${
+                    simProductProfit < 0 ? 'text-red-600' : 'text-slate-900'
+                  }`}>
+                    {simProductProfit < 0
+                      ? `-${currency}${Math.abs(Math.round(simProductProfit)).toLocaleString()}`
+                      : `${currency}${Math.round(simProductProfit).toLocaleString()}`}
+                  </span>
                 </div>
               </div>
             );

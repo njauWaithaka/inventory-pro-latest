@@ -4,7 +4,7 @@ import {
   Layers, MapPin, CreditCard, ChevronRight, Download, 
   Printer, Calendar, HelpCircle, ArrowUpRight, ArrowDownRight, Tag, 
   CheckCircle, AlertCircle, Sparkles, User, RefreshCcw, Activity,
-  Filter, DollarSign, Wallet, Percent, Clock
+  Filter, DollarSign, Wallet, Percent, Clock, Receipt
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
@@ -47,6 +47,7 @@ export function SalesAnalytics() {
   // Raw State Streams
   const [invoices, setInvoices] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Global Interactive Dimensions Filters & Date Controls
@@ -78,12 +79,16 @@ export function SalesAnalytics() {
     const unsubProducts = onSnapshot(collection(db, `${basePath}/products`), (snap) => {
       setProducts(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
+    const unsubExpenses = onSnapshot(collection(db, `${basePath}/expenses`), (snap) => {
+      setExpenses(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
 
     const timer = setTimeout(() => setLoading(false), 500);
 
     return () => {
       unsubInvoices();
       unsubProducts();
+      unsubExpenses();
       clearTimeout(timer);
     };
   }, [profile?.companyId]);
@@ -280,8 +285,37 @@ export function SalesAnalytics() {
     const grossProfit = totalSales - totalCOGS;
     const grossMarginPct = totalSales > 0 ? (grossProfit / totalSales) * 100 : 0;
 
-    // Standard 12% Operating Overhead (expenses)
-    const operatingExpenses = Math.round(totalSales * 0.12);
+    // Filter real expenses according to selected date criteria
+    const filteredExpenses = expenses.filter(exp => {
+      if (exp.status === 'REJECTED' || exp.status === 'CANCELLED') return false;
+      const expDate = (exp.date || exp.createdAt || '').substring(0, 10);
+      if (!expDate) return true;
+      if (datePreset === 'today') return expDate === todayStr;
+      if (datePreset === 'yesterday') return expDate === yesterdayStr;
+      if (datePreset === 'week') {
+        const d = new Date(expDate);
+        const now = new Date();
+        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+        return d >= startOfWeek;
+      }
+      if (datePreset === 'month') {
+        const d = new Date(expDate);
+        const now = new Date();
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      }
+      if (datePreset === 'year') {
+        const d = new Date(expDate);
+        return d.getFullYear() === new Date().getFullYear();
+      }
+      if (datePreset === 'custom') {
+        if (customStartDate && expDate < customStartDate) return false;
+        if (customEndDate && expDate > customEndDate) return false;
+      }
+      return true;
+    });
+
+    const operatingExpenses = filteredExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+    // Net Profit = Sales Revenue − COGS − Expenses
     const netProfit = grossProfit - operatingExpenses;
     const netMarginPct = totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
 
@@ -335,13 +369,14 @@ export function SalesAnalytics() {
       numberOfCustomers,
       salesGrowthVsYesterday,
       mtdSales,
-      ytdSales
+      ytdSales,
+      expensesCount: filteredExpenses.length
     };
-  }, [filteredRecords, standardizedRecords]);
+  }, [filteredRecords, standardizedRecords, expenses, datePreset, customStartDate, customEndDate]);
 
   // Group trend chart data based on selected interactive trend view
   const trendsData = useMemo(() => {
-    const map: Record<string, { name: string; Actual: number; Target: number; GrossProfit: number; NetProfit: number; Growth: number }> = {};
+    const map: Record<string, { name: string; Actual: number; Target: number; GrossProfit: number; Expenses: number; NetProfit: number; Growth: number }> = {};
     
     filteredRecords.forEach(r => {
       let key = r.date;
@@ -356,12 +391,36 @@ export function SalesAnalytics() {
       }
 
       if (!map[key]) {
-        map[key] = { name: key, Actual: 0, Target: 0, GrossProfit: 0, NetProfit: 0, Growth: 0 };
+        map[key] = { name: key, Actual: 0, Target: 0, GrossProfit: 0, Expenses: 0, NetProfit: 0, Growth: 0 };
       }
       map[key].Actual += r.netSales;
       map[key].Target += r.salesTarget;
       map[key].GrossProfit += r.grossProfit;
-      map[key].NetProfit += (r.grossProfit - r.netSales * 0.12);
+    });
+
+    // Map expenses to corresponding trend periods
+    expenses.filter(exp => exp.status !== 'REJECTED' && exp.status !== 'CANCELLED').forEach(exp => {
+      const expDate = (exp.date || exp.createdAt || '').substring(0, 10);
+      if (!expDate) return;
+      let key = expDate;
+      if (activeTrend === 'weekly') {
+        const dateObj = new Date(expDate);
+        const w = Math.ceil(dateObj.getDate() / 7);
+        key = `Wk ${w} - ${dateObj.toLocaleString('default', { month: 'short' })}`;
+      } else if (activeTrend === 'monthly') {
+        key = new Date(expDate).toLocaleString('default', { month: 'short', year: '2-digit' });
+      } else if (activeTrend === 'yearly') {
+        key = new Date(expDate).getFullYear().toString();
+      }
+
+      if (map[key]) {
+        map[key].Expenses += Number(exp.amount) || 0;
+      }
+    });
+
+    // Compute Net Profit = Gross Profit - Expenses
+    Object.values(map).forEach(item => {
+      item.NetProfit = item.GrossProfit - item.Expenses;
     });
 
     const list = Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
@@ -373,11 +432,12 @@ export function SalesAnalytics() {
         ...item, 
         Actual: Math.round(item.Actual),
         GrossProfit: Math.round(item.GrossProfit),
+        Expenses: Math.round(item.Expenses),
         NetProfit: Math.round(item.NetProfit),
         Growth: parseFloat(pct.toFixed(1)) 
       };
     });
-  }, [filteredRecords, activeTrend]);
+  }, [filteredRecords, activeTrend, expenses]);
 
   // Calculate Hourly statistics
   const hourlyData = useMemo(() => {
@@ -483,11 +543,37 @@ export function SalesAnalytics() {
 
   // Export to CSV Function
   const exportCSV = () => {
-    const headers = ['Invoice No', 'Date', 'Time', 'Branch', 'Category', 'Product', 'Quantity', 'Sales (Net)', 'COGS', 'Gross Profit', 'Salesperson'];
-    const rows = filteredRecords.map(r => [
-      r.invoiceNumber, r.date, r.time, r.branch, r.category, r.productName, r.quantitySold, r.netSales, r.cogs, r.grossProfit, r.salesperson
+    const summaryRows = [
+      ['Sales Analytics & Financial Report', `Period: ${datePreset.toUpperCase()}`],
+      ['Generated At', new Date().toLocaleString()],
+      [],
+      ['Financial KPI Metric', 'Amount'],
+      ['Gross Sales Revenue', metrics.totalSales.toFixed(2)],
+      ['Cost of Goods Sold (COGS)', metrics.totalCOGS.toFixed(2)],
+      ['Gross Profit (Revenue - COGS)', metrics.grossProfit.toFixed(2)],
+      ['Gross Margin %', `${metrics.grossMarginPct.toFixed(2)}%`],
+      ['Total Expenses', metrics.operatingExpenses.toFixed(2)],
+      ['Net Profit (Revenue - COGS - Expenses)', metrics.netProfit.toFixed(2)],
+      ['Net Margin %', `${metrics.netMarginPct.toFixed(2)}%`],
+      [],
+      ['Itemized Transaction Ledger'],
+      ['Invoice No', 'Date', 'Time', 'Branch', 'Category', 'Product', 'Quantity', 'Sales (Net)', 'COGS', 'Gross Profit', 'Salesperson']
+    ];
+    const dataRows = filteredRecords.map(r => [
+      `"${r.invoiceNumber}"`,
+      r.date,
+      r.time,
+      `"${r.branch}"`,
+      `"${r.category}"`,
+      `"${(r.productName || '').replace(/"/g, '""')}"`,
+      r.quantitySold,
+      r.netSales.toFixed(2),
+      r.cogs.toFixed(2),
+      r.grossProfit.toFixed(2),
+      `"${r.salesperson}"`
     ]);
-    const blob = new Blob([[headers.join(','), ...rows.map(e => e.join(','))].join('\n')], { type: 'text/csv' });
+    const allRows = [...summaryRows, ...dataRows];
+    const blob = new Blob([allRows.map(e => e.join(',')).join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -699,7 +785,7 @@ export function SalesAnalytics() {
         className="w-full"
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
         <div className="p-6 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-3xl shadow-lg shadow-blue-600/15 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -714,7 +800,7 @@ export function SalesAnalytics() {
           </div>
           <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-bold text-blue-100">
             <span>Today: {currency}{Math.round(metrics.totalSalesToday).toLocaleString()}</span>
-            <span>{metrics.totalTransactions} Total Transactions</span>
+            <span>{metrics.totalTransactions} Orders</span>
           </div>
         </div>
 
@@ -724,33 +810,73 @@ export function SalesAnalytics() {
               <span className="text-[10px] font-black uppercase tracking-widest text-emerald-200 flex items-center gap-1.5">
                 <TrendingUp className="w-3.5 h-3.5" /> Gross Profit
               </span>
-              <span className="text-[9px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full uppercase text-white">
+              <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full uppercase ${
+                metrics.grossProfit < 0 ? 'bg-red-500/30 text-red-100 border border-red-400/40' : 'bg-white/20 text-white'
+              }`}>
                 {metrics.grossMarginPct.toFixed(1)}% Gross Margin
               </span>
             </div>
-            <p className="text-3xl font-black tracking-tight">{currency}{Math.round(metrics.grossProfit).toLocaleString()}</p>
+            <p className={`text-3xl font-black tracking-tight ${metrics.grossProfit < 0 ? 'text-red-200' : 'text-white'}`}>
+              {metrics.grossProfit < 0
+                ? `-${currency}${Math.abs(Math.round(metrics.grossProfit)).toLocaleString()}`
+                : `${currency}${Math.round(metrics.grossProfit).toLocaleString()}`}
+            </p>
           </div>
           <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-bold text-emerald-100">
-            <span>COGS Basis: {currency}{Math.round(metrics.totalCOGS).toLocaleString()}</span>
-            <span>Net Sales - COGS</span>
+            <span>COGS: {currency}{Math.round(metrics.totalCOGS).toLocaleString()}</span>
+            <span>Revenue - COGS</span>
           </div>
         </div>
 
-        <div className="p-6 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl shadow-lg shadow-slate-900/15 relative overflow-hidden flex flex-col justify-between">
+        <div className="p-6 bg-gradient-to-br from-rose-600 to-red-700 text-white rounded-3xl shadow-lg shadow-rose-600/15 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 flex items-center gap-1.5">
-                <Wallet className="w-3.5 h-3.5 text-amber-400" /> Net Profit
+              <span className="text-[10px] font-black uppercase tracking-widest text-rose-200 flex items-center gap-1.5">
+                <Receipt className="w-3.5 h-3.5" /> Total Expenses
               </span>
-              <span className="text-[9px] font-extrabold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2.5 py-0.5 rounded-full uppercase">
+              <span className="text-[9px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full uppercase text-white">
+                {metrics.expensesCount} Recorded
+              </span>
+            </div>
+            <p className="text-3xl font-black tracking-tight">{currency}{Math.round(metrics.operatingExpenses).toLocaleString()}</p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-bold text-rose-100">
+            <span>Operating Costs</span>
+            <span>Does not reduce revenue</span>
+          </div>
+        </div>
+
+        <div className={`p-6 rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between transition-all ${
+          metrics.netProfit < 0
+            ? 'bg-gradient-to-br from-rose-950 via-slate-900 to-slate-900 border-2 border-rose-500/50 shadow-rose-900/20'
+            : 'bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-slate-900/15'
+        }`}>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 ${
+                metrics.netProfit < 0 ? 'text-rose-300' : 'text-slate-300'
+              }`}>
+                <Wallet className={`w-3.5 h-3.5 ${metrics.netProfit < 0 ? 'text-rose-400' : 'text-amber-400'}`} /> Net Profit
+              </span>
+              <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full uppercase border ${
+                metrics.netProfit < 0
+                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  : 'bg-amber-400/20 text-amber-300 border-amber-400/30'
+              }`}>
                 {metrics.netMarginPct.toFixed(1)}% Net Margin
               </span>
             </div>
-            <p className="text-3xl font-black tracking-tight text-white">{currency}{Math.round(metrics.netProfit).toLocaleString()}</p>
+            <p className={`text-3xl font-black tracking-tight ${metrics.netProfit < 0 ? 'text-red-400' : 'text-white'}`}>
+              {metrics.netProfit < 0
+                ? `-${currency}${Math.abs(Math.round(metrics.netProfit)).toLocaleString()}`
+                : `${currency}${Math.round(metrics.netProfit).toLocaleString()}`}
+            </p>
           </div>
-          <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs font-bold text-slate-300">
-            <span>Est. Overhead: {currency}{Math.round(metrics.operatingExpenses).toLocaleString()}</span>
-            <span>Gross Profit - Expenses</span>
+          <div className={`mt-4 pt-3 border-t flex items-center justify-between text-xs font-bold ${
+            metrics.netProfit < 0 ? 'border-rose-900/60 text-rose-200/80' : 'border-slate-700/60 text-slate-300'
+          }`} title="Net Profit = Sales Revenue − COGS − Expenses">
+            <span>Formula</span>
+            <span>Revenue - COGS - Expenses</span>
           </div>
         </div>
       </div>
@@ -1205,8 +1331,13 @@ export function SalesAnalytics() {
                       <td className="py-2.5 text-right font-black text-slate-900">
                         {currency}{Math.round(sales).toLocaleString()}
                       </td>
-                      <td className="py-2.5 text-right font-black text-emerald-600">
-                        {currency}{Math.round(gp).toLocaleString()}
+                      <td className={cn(
+                        "py-2.5 text-right font-black",
+                        gp < 0 ? "text-red-600" : "text-emerald-600"
+                      )}>
+                        {gp < 0
+                          ? `-${currency}${Math.abs(Math.round(gp)).toLocaleString()}`
+                          : `${currency}${Math.round(gp).toLocaleString()}`}
                       </td>
                       <td className="py-2.5 text-right">
                         <span className={cn(

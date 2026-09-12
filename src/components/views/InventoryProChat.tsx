@@ -190,13 +190,15 @@ function TrendTag({ trend, pct }: { trend: string; pct: number }) {
   );
 }
 
-function MetricGrid({ items }: { items: { label: string; value: string | React.ReactNode; sub?: string; subTone?: string }[] }) {
+function MetricGrid({ items }: { items: { label: string; value: string | React.ReactNode; sub?: string; subTone?: string; valueTone?: string }[] }) {
   return (
     <div className="ii-metric-grid">
       {items.map((m, i) => (
         <div className="ii-metric" key={i}>
           <div className="ii-metric-label">{m.label}</div>
-          <div className="ii-metric-value">{m.value}</div>
+          <div className="ii-metric-value" style={m.valueTone && TONE[m.valueTone] ? { color: TONE[m.valueTone].fg } : undefined}>
+            {m.value}
+          </div>
           {m.sub ? (
             <div className="ii-metric-sub" style={m.subTone && TONE[m.subTone] ? { color: TONE[m.subTone].fg } : undefined}>
               {m.sub}
@@ -1050,17 +1052,52 @@ export function InvenioIntelligence({
     // 9. PROFIT ANALYSIS
     if (activeCommand.type === "profit") {
       const topMargin = [...products].sort((a, b) => b.marginPct - a.marginPct);
+      const est30dProfit = products.reduce((s, p) => s + p.dailyProfit * 30, 0);
       return (
         <>
           <MetricGrid items={[
-            { label: "Est. 30d Profit", value: fmtMoney(products.reduce((s, p) => s + p.dailyProfit * 30, 0)) },
-            { label: "Avg Margin", value: `${Math.round(products.reduce((s, p) => s + p.marginPct, 0) / products.length)}%` },
+            { label: "Est. 30d Profit", value: fmtMoney(est30dProfit), valueTone: est30dProfit < 0 ? "red" : undefined },
+            { label: "Avg Margin", value: `${Math.round(products.reduce((s, p) => s + p.marginPct, 0) / (products.length || 1))}%` },
           ]} />
           <SectionTitle>Highest Margin Products</SectionTitle>
           <div className="ii-row-list">
             {topMargin.slice(0, 6).map((p) => (
               <CompactProductRow key={p.sku} p={p} onClick={() => nav("product", p)}
-                right={<span className="ii-mono">{Math.round(p.marginPct)}% margin</span>} />
+                right={<span className="ii-mono" style={p.marginPct < 0 ? { color: TONE.red.fg } : undefined}>{Math.round(p.marginPct)}% margin</span>} />
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    // 9b. NET PROFIT
+    if (activeCommand.id === "net-profit") {
+      const totalRev = products.reduce((s, p) => s + p.dailyRevenue * 30, 0);
+      const grossProfit = products.reduce((s, p) => s + p.dailyProfit * 30, 0);
+      const modeledExpenses = totalRev * 0.15;
+      const netProfit = grossProfit - modeledExpenses;
+      const netMargin = totalRev > 0 ? (netProfit / totalRev) * 100 : 0;
+      return (
+        <>
+          <MetricGrid items={[
+            { label: "Est. Net Profit (30d)", value: fmtMoney(netProfit), valueTone: netProfit < 0 ? "red" : undefined },
+            { label: "Net Margin", value: `${netMargin.toFixed(1)}%`, valueTone: netMargin < 0 ? "red" : undefined },
+            { label: "Gross Profit", value: fmtMoney(grossProfit), valueTone: grossProfit < 0 ? "red" : undefined },
+            { label: "Modeled Expenses", value: fmtMoney(modeledExpenses) },
+          ]} />
+          <InsightBlock
+            icon={DollarSign}
+            title="Net Profit Analysis"
+            insight={netProfit < 0
+              ? `Warning: Modeled net profit is negative (${fmtMoney(netProfit)}). Operating expenses exceed current gross margins.`
+              : `Operating at an estimated ${netMargin.toFixed(1)}% net margin. Operating expenses are currently covered by gross margin.`
+            }
+          />
+          <SectionTitle>Underperforming / Lower Margin SKUs</SectionTitle>
+          <div className="ii-row-list">
+            {[...products].sort((a, b) => a.dailyProfit - b.dailyProfit).slice(0, 6).map((p) => (
+              <CompactProductRow key={p.sku} p={p} onClick={() => nav("product", p)}
+                right={<span className="ii-mono" style={p.dailyProfit < 0 ? { color: TONE.red.fg } : undefined}>{fmtMoney(p.dailyProfit * 30)}/mo</span>} />
             ))}
           </div>
         </>

@@ -124,22 +124,38 @@ export function BusinessOwnerKPISection({
         </div>
 
         {/* 2. Net Profit */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-all">
+        <div className={`p-4 sm:p-5 rounded-2xl border shadow-sm flex flex-col justify-between transition-all ${
+          netProfitComparison.current < 0
+            ? 'bg-rose-50/60 border-rose-200 hover:border-rose-300'
+            : 'bg-white border-slate-200 hover:border-slate-300'
+        }`}>
           <div className="flex items-center justify-between">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shrink-0">
+            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              netProfitComparison.current < 0 ? 'bg-rose-100 text-rose-600' : 'bg-indigo-50 text-indigo-600'
+            }`}>
               <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
+              analytics.netMarginPctComparison.current < 0 || netProfitComparison.current < 0
+                ? 'text-rose-700 bg-rose-50 border-rose-200'
+                : 'text-indigo-700 bg-indigo-50 border-indigo-100'
+            }`}>
               {analytics.netMarginPctComparison.current.toFixed(1)}% Margin
             </span>
           </div>
           <div className="mt-3">
-            <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Net Profit</p>
-            <p className="text-lg sm:text-2xl font-black text-slate-900 mt-0.5 tracking-tight">
-              {currency}{Math.round(netProfitComparison.current).toLocaleString()}
+            <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${
+              netProfitComparison.current < 0 ? 'text-rose-700' : 'text-slate-400'
+            }`}>Net Profit</p>
+            <p className={`text-lg sm:text-2xl font-black mt-0.5 tracking-tight ${
+              netProfitComparison.current < 0 ? 'text-red-600' : 'text-slate-900'
+            }`}>
+              {netProfitComparison.current < 0
+                ? `-${currency}${Math.abs(Math.round(netProfitComparison.current)).toLocaleString()}`
+                : `${currency}${Math.round(netProfitComparison.current).toLocaleString()}`}
             </p>
-            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mt-1">
-              <span>OpEx (~12%): {currency}{Math.round(salesComparison.current * 0.12).toLocaleString()}</span>
+            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mt-1" title="Net Profit = Sales Revenue − COGS − Expenses">
+              <span>Expenses: {currency}{Math.round(analytics.expensesComparison?.current ?? 0).toLocaleString()}</span>
               {renderTrendBadge(netProfitComparison.pctChange)}
             </div>
           </div>
@@ -159,7 +175,9 @@ export function BusinessOwnerKPISection({
               {grossMarginPctComparison.current.toFixed(1)}%
             </p>
             <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mt-1">
-              <span>Gross: {currency}{Math.round(grossProfitComparison.current).toLocaleString()}</span>
+              <span className={grossProfitComparison.current < 0 ? 'text-red-600 font-bold' : ''}>
+                Gross: {grossProfitComparison.current < 0 ? '-' : ''}{currency}{Math.abs(Math.round(grossProfitComparison.current)).toLocaleString()}
+              </span>
               <span className="font-mono text-[10px]">Prev: {grossMarginPctComparison.prior.toFixed(1)}%</span>
             </div>
           </div>
