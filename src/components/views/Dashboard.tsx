@@ -44,6 +44,10 @@ import {
 import { InsightBadge } from "../common/InsightBadge";
 import { motion } from "motion/react";
 import {
+  calculateConsolidatedSalesMetrics,
+  formatNetProfitDisplay,
+} from "./profit/profitUtils";
+import {
   AreaChart,
   Area,
   XAxis,
@@ -82,6 +86,7 @@ export function Dashboard({
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [grns, setGrns] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [receipts, setReceipts] = useState<any[]>([]);
   const [creditNotes, setCreditNotes] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [stockMovements, setStockMovements] = useState<any[]>([]);
@@ -110,6 +115,10 @@ export function Dashboard({
     const invoicesQuery = collection(
       db,
       `companies/${profile.companyId}/invoices`,
+    );
+    const receiptsQuery = collection(
+      db,
+      `companies/${profile.companyId}/receipts`,
     );
     const creditNotesQuery = collection(
       db,
@@ -152,6 +161,10 @@ export function Dashboard({
       setInvoices(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
 
+    const unsubscribeReceipts = onSnapshot(receiptsQuery, (snapshot) => {
+      setReceipts(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
+    });
+
     const unsubscribeCreditNotes = onSnapshot(creditNotesQuery, (snapshot) => {
       setCreditNotes(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
     });
@@ -180,6 +193,7 @@ export function Dashboard({
       unsubscribePOs();
       unsubscribeGrns();
       unsubscribeInvoices();
+      unsubscribeReceipts();
       unsubscribeCreditNotes();
       unsubscribeExpenses();
       unsubscribeMovements();
@@ -192,80 +206,30 @@ export function Dashboard({
   const allAlerts = [...alerts];
 
   const salesMetrics = useMemo(() => {
-    const salesInvoices = invoices.filter(
-      (inv) => inv.type === "standard" || !inv.type
-    );
-    let totalSales = 0;
-    let totalCOGS = 0;
-    let totalUnitsSold = 0;
-
-    salesInvoices.forEach((inv) => {
-      const items = inv.items || [];
-      if (items.length === 0) {
-        const amt = Number(inv.amount) || 0;
-        totalSales += amt;
-        totalCOGS += amt * 0.65;
-        totalUnitsSold += 1;
-      } else {
-        items.forEach((it: any) => {
-          const qty = Number(it.quantity) || 1;
-          const price = Number(it.price) || Number(it.unitPrice) || 0;
-          const net = Number(it.total) || qty * price;
-          totalSales += net;
-          totalUnitsSold += qty;
-
-          const prod = products.find(
-            (p) => p.id === it.productId || p.sku === it.sku
-          );
-          let unitCost = Number(
-            prod?.buyingPrice || prod?.value || it.buyingPrice || it.cost || 0
-          );
-          if (unitCost <= 0) {
-            unitCost = price > 0 ? price * 0.65 : net * 0.65;
-          }
-          totalCOGS += qty * unitCost;
-        });
-      }
+    // Calculate comprehensive real-time profit and sales metrics directly from POS receipts and invoices
+    const consolidated = calculateConsolidatedSalesMetrics({
+      invoices,
+      receipts,
+      products,
+      expenses,
+      creditNotes,
     });
-
-    // Real Expenses Calculation: non-cancelled and non-rejected expenses
-    const validExpenses = expenses.filter(
-      (exp) => exp.status !== "REJECTED" && exp.status !== "CANCELLED"
-    );
-    const totalExpenses = validExpenses.reduce(
-      (sum, exp) => sum + (Number(exp.amount) || 0),
-      0
-    );
-
-    // Net Profit = Sales Revenue − COGS − Expenses
-    const grossProfit = totalSales - totalCOGS;
-    const netProfit = grossProfit - totalExpenses;
-    const netMarginPct =
-      totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
 
     const totalCurrentStock = products.reduce(
       (sum, p) => sum + (Number(p.quantity) || 0),
       0
     );
-    const totalBeginningStock = totalUnitsSold + totalCurrentStock;
+    const totalBeginningStock = consolidated.totalUnitsSold + totalCurrentStock;
     const sellThroughRate =
       totalBeginningStock > 0
-        ? (totalUnitsSold / totalBeginningStock) * 100
+        ? (consolidated.totalUnitsSold / totalBeginningStock) * 100
         : 0;
 
     return {
-      totalSales,
-      totalCOGS,
-      grossProfit,
-      totalExpenses,
-      expensesCount: validExpenses.length,
-      netProfit,
-      netMarginPct,
-      salesCount: salesInvoices.length,
-      totalUnitsSold,
+      ...consolidated,
       sellThroughRate,
     };
-  }, [invoices, products, expenses]);
+  }, [invoices, receipts, products, expenses, creditNotes]);
 
   const turnoverDateRange = useMemo(() => {
     return getDateRangeForPeriod('This Month');
@@ -471,7 +435,12 @@ export function Dashboard({
       ["Cost of Goods Sold (COGS)", `${currency}${salesMetrics.totalCOGS.toFixed(2)}`],
       ["Gross Profit (Sales - COGS)", `${currency}${salesMetrics.grossProfit.toFixed(2)}`],
       ["Total Expenses", `${currency}${salesMetrics.totalExpenses.toFixed(2)}`],
-      ["Net Profit (Sales - COGS - Expenses)", `${currency}${salesMetrics.netProfit.toFixed(2)}`],
+      [
+        salesMetrics.netProfit < 0
+          ? "Net Loss (Sales - COGS - Expenses)"
+          : "Net Profit (Sales - COGS - Expenses)",
+        `${currency}${Math.abs(salesMetrics.netProfit).toFixed(2)}`
+      ],
       ["Net Margin %", `${salesMetrics.netMarginPct.toFixed(1)}%`],
       ["Turnover Ratio", turnoverStats.overallRatio.toFixed(2)],
       ["Total Active SKUs", totalSKUs.toString()],
@@ -559,10 +528,11 @@ export function Dashboard({
           <SummaryCard
             title="Total Sales"
             value={`${currency}${Math.round(salesMetrics.totalSales).toLocaleString()}`}
-            subtitle={`${salesMetrics.salesCount} total invoices`}
+            subtitle={`${salesMetrics.salesCount} total transactions`}
             icon={ShoppingCart}
             gradient="from-[#2563EB] to-[#1D4ED8]"
             badgeText="REVENUE"
+            onClick={() => onNavigate?.('invoices')}
           />
           <SummaryCard
             title="Turnover Rate"
@@ -582,15 +552,16 @@ export function Dashboard({
             onClick={() => onNavigate?.('expenses')}
           />
           <SummaryCard
-            title="Net Profit"
-            value={salesMetrics.netProfit < 0
-              ? `-${currency}${Math.abs(Math.round(salesMetrics.netProfit)).toLocaleString()}`
-              : `${currency}${Math.round(salesMetrics.netProfit).toLocaleString()}`}
-            subtitle={`${salesMetrics.netMarginPct.toFixed(1)}% net margin`}
-            icon={TrendingUp}
+            title={salesMetrics.netProfit < 0 ? "Loss" : salesMetrics.netProfit === 0 ? "Break-even" : "Net Profit"}
+            value={`${currency}${Math.abs(Math.round(salesMetrics.netProfit)).toLocaleString()}`}
+            subtitle={salesMetrics.netProfit < 0
+              ? `${Math.abs(salesMetrics.netMarginPct).toFixed(1)}% loss margin`
+              : `${salesMetrics.netMarginPct.toFixed(1)}% net margin`}
+            icon={salesMetrics.netProfit < 0 ? TrendingDown : TrendingUp}
             gradient={salesMetrics.netProfit < 0 ? "from-red-600 to-rose-700" : "from-[#10B981] to-[#047857]"}
             isNegative={salesMetrics.netProfit < 0}
-            badgeText={salesMetrics.netProfit < 0 ? "DEFICIT" : "NET MARGIN"}
+            badgeText={salesMetrics.netProfit < 0 ? "LOSS" : salesMetrics.netProfit === 0 ? "BREAK-EVEN" : "NET MARGIN"}
+            onClick={() => onNavigate?.('profit_tracking')}
           />
         </div>
 

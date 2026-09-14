@@ -179,7 +179,8 @@ export function calculateComprehensiveAnalytics(
   selectedPeriod: TimePeriod = 'This Month',
   customRange?: { start: Date; end: Date },
   currency: string = 'KSh',
-  expenses: any[] = []
+  expenses: any[] = [],
+  receipts: any[] = []
 ): ComprehensiveAnalyticsResult {
   // 1. Resolve current and prior date ranges
   const now = new Date();
@@ -208,11 +209,43 @@ export function calculateComprehensiveAnalytics(
   const priorRange = getPriorDateRange({ start: currentStart, end: currentEnd });
   const periodDays = Math.max(1, Math.round((currentEnd.getTime() - currentStart.getTime()) / 86400000));
 
-  // 2. Filter Invoices for Current & Prior Periods
-  const salesInvoices = invoices.filter(inv => inv.type === 'standard' || !inv.type);
+  // 2. Consolidate Invoices & Receipts for Current & Prior Periods (deduplicated)
+  const consolidatedSalesList: any[] = [];
+  const processedKeys = new Set<string>();
 
-  const getInvoicesInRange = (start: Date, end: Date) => {
-    return salesInvoices.filter(inv => {
+  receipts.forEach(rcp => {
+    const status = String(rcp.status || '').toLowerCase();
+    if (status === 'voided' || status === 'cancelled') return;
+    const rKey = rcp.id || rcp.receiptId || rcp.receiptNumber;
+    if (rKey) {
+      processedKeys.add(String(rKey));
+      if (rcp.invoiceId) processedKeys.add(String(rcp.invoiceId));
+    }
+    consolidatedSalesList.push({
+      ...rcp,
+      amount: rcp.amount ?? rcp.total ?? 0,
+      date: rcp.date || rcp.createdAt,
+    });
+  });
+
+  invoices.filter(inv => inv.type === 'standard' || !inv.type).forEach(inv => {
+    const status = String(inv.status || '').toLowerCase();
+    if (status === 'void' || status === 'cancelled' || status === 'rejected') return;
+    const invId = inv.id;
+    const rcpRef = inv.receiptId || inv.receiptNumber;
+    if ((invId && processedKeys.has(String(invId))) || (rcpRef && processedKeys.has(String(rcpRef)))) {
+      return;
+    }
+    if (invId) processedKeys.add(String(invId));
+    consolidatedSalesList.push({
+      ...inv,
+      amount: inv.amount ?? inv.total ?? 0,
+      date: inv.date || inv.createdAt,
+    });
+  });
+
+  const getSalesInRange = (start: Date, end: Date) => {
+    return consolidatedSalesList.filter(inv => {
       const invDateStr = inv.date || inv.createdAt;
       if (!invDateStr) return false;
       const t = new Date(invDateStr).getTime();
@@ -220,8 +253,8 @@ export function calculateComprehensiveAnalytics(
     });
   };
 
-  const currentInvoices = getInvoicesInRange(currentStart, currentEnd);
-  const priorInvoices = getInvoicesInRange(priorRange.start, priorRange.end);
+  const currentInvoices = getSalesInRange(currentStart, currentEnd);
+  const priorInvoices = getSalesInRange(priorRange.start, priorRange.end);
 
   // Helper to compute sales and COGS from invoice collection
   const computeInvoiceFinancials = (invList: any[]) => {
@@ -235,7 +268,8 @@ export function calculateComprehensiveAnalytics(
       if (items.length === 0) {
         const amt = Number(inv.amount) || 0;
         sales += amt;
-        cogs += amt * 0.65;
+        const recordedCogs = Number(inv.cogs ?? inv.cost ?? 0);
+        cogs += recordedCogs;
         unitsSold += Math.max(1, Math.round(amt / 100));
       } else {
         items.forEach((it: any) => {
@@ -246,12 +280,9 @@ export function calculateComprehensiveAnalytics(
           unitsSold += qty;
 
           const prod = products.find(p => p.id === it.productId || p.sku === it.sku || p.name === it.name);
-          let unitCost = getProductUnitCost(prod);
+          let unitCost = Number(it.buyingPrice ?? it.costPrice ?? it.cost ?? 0);
           if (unitCost <= 0) {
-            unitCost = Number(it.buyingPrice || it.cost || 0);
-          }
-          if (unitCost <= 0) {
-            unitCost = price > 0 ? price * 0.65 : lineTotal * 0.65;
+            unitCost = getProductUnitCost(prod);
           }
           const lineCOGS = qty * unitCost;
           cogs += lineCOGS;
@@ -689,7 +720,7 @@ export function calculateComprehensiveAnalytics(
       const dateKey = d.toISOString().split('T')[0];
       const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       
-      const dayInvoices = salesInvoices.filter(inv => {
+      const dayInvoices = consolidatedSalesList.filter(inv => {
         const invD = parseInvDate(inv);
         if (!invD) return false;
         return invD.getFullYear() === d.getFullYear() &&
@@ -724,7 +755,7 @@ export function calculateComprehensiveAnalytics(
       const wStart = new Date(wEnd.getTime() - (6 * dayMs));
       const label = `Wk ${6 - i} (${wStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
       
-      const wInvoices = salesInvoices.filter(inv => {
+      const wInvoices = consolidatedSalesList.filter(inv => {
         const invD = parseInvDate(inv);
         if (!invD) return false;
         const t = invD.getTime();
@@ -757,7 +788,7 @@ export function calculateComprehensiveAnalytics(
       const mStart = new Date(mDate.getFullYear(), mDate.getMonth(), 1, 0, 0, 0, 0);
       const mEnd = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
-      const mInvoices = salesInvoices.filter(inv => {
+      const mInvoices = consolidatedSalesList.filter(inv => {
         const invD = parseInvDate(inv);
         if (!invD) return false;
         const t = invD.getTime();

@@ -16,6 +16,7 @@ import {
 import { 
   calculateComprehensiveAnalytics 
 } from '../../lib/comprehensiveAnalyticsService';
+import { calculateConsolidatedSalesMetrics } from './profit/profitUtils';
 import { BusinessOwnerKPISection } from './analytics/BusinessOwnerKPISection';
 import { ActionableInsightsSection } from './analytics/ActionableInsightsSection';
 import { SalesPerformanceTrend } from './analytics/SalesPerformanceTrend';
@@ -52,10 +53,12 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
   const [products, setProducts] = useState<any[]>([]);
   const [stockMovements, setStockMovements] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [receipts, setReceipts] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
   const [movementsLoaded, setMovementsLoaded] = useState(false);
   const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+  const [receiptsLoaded, setReceiptsLoaded] = useState(false);
   const [expensesLoaded, setExpensesLoaded] = useState(false);
 
   // Filter States
@@ -406,15 +409,25 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
       setExpensesLoaded(true);
     });
 
+    const rcpQuery = collection(db, `companies/${profile.companyId}/receipts`);
+    const unsubscribeReceipts = onSnapshot(rcpQuery, (snapshot) => {
+      setReceipts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      setReceiptsLoaded(true);
+    }, (error) => {
+      console.error("Query error in Analytics receipts:", error);
+      setReceiptsLoaded(true);
+    });
+
     return () => {
       unsubscribeProducts();
       unsubscribeMovements();
       unsubscribeInvoices();
       unsubscribeExpenses();
+      unsubscribeReceipts();
     };
   }, [profile?.companyId]);
 
-  const loading = !productsLoaded || !movementsLoaded || !invoicesLoaded || !expensesLoaded;
+  const loading = !productsLoaded || !movementsLoaded || !invoicesLoaded || !expensesLoaded || !receiptsLoaded;
 
   // Custom range memo
   const customRange = useMemo(() => {
@@ -439,9 +452,10 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
       selectedPeriod,
       customRange,
       currency,
-      expenses
+      expenses,
+      receipts
     );
-  }, [products, invoices, stockMovements, selectedPeriod, customRange, currency, expenses]);
+  }, [products, invoices, stockMovements, selectedPeriod, customRange, currency, expenses, receipts]);
 
   // Overall statistics memo
   const overallStats = useMemo(() => {
@@ -468,65 +482,27 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
   }, 0);
   const averageSTR = totalUnitsReceived > 0 ? (totalUnitsSold / totalUnitsReceived) * 100 : 0;
 
-  // Calculate Sales, Gross Profit, and Net Profit from Invoices & Actual Expenses
+  // Calculate Sales, Gross Profit, and Net Profit from Consolidated Metrics Engine
   const salesMetrics = useMemo(() => {
-    const salesInvoices = invoices.filter(inv => inv.type === 'standard' || !inv.type);
-    
-    const filteredInvoices = salesInvoices.filter(inv => {
-      const invDateStr = inv.date || inv.createdAt;
-      if (!invDateStr) return true;
-      const invDate = new Date(invDateStr);
-      if (isNaN(invDate.getTime())) return true;
-      if (dateRange?.start && invDate < dateRange.start) return false;
-      if (dateRange?.end && invDate > dateRange.end) return false;
-      return true;
+    const metrics = calculateConsolidatedSalesMetrics({
+      invoices,
+      receipts,
+      products,
+      expenses,
+      startDate: dateRange?.start || null,
+      endDate: dateRange?.end || null,
     });
 
-    let totalSales = 0;
-    let totalCOGS = 0;
-
-    filteredInvoices.forEach(inv => {
-      const items = inv.items || [];
-      if (items.length === 0) {
-        const amt = Number(inv.amount) || 0;
-        totalSales += amt;
-        totalCOGS += amt * 0.65;
-      } else {
-        items.forEach((it: any) => {
-          const qty = Number(it.quantity) || 1;
-          const price = Number(it.price || it.unitPrice) || 0;
-          const lineTotal = Number(it.total) || qty * price;
-          totalSales += lineTotal;
-
-          const prod = products.find(p => p.id === it.productId || p.sku === it.sku || p.name === it.name);
-          let unitCost = Number(prod?.buyingPrice || prod?.value || it.buyingPrice || it.cost || 0);
-          if (unitCost <= 0) {
-            unitCost = price > 0 ? price * 0.65 : lineTotal * 0.65;
-          }
-          totalCOGS += qty * unitCost;
-        });
-      }
-    });
-
-    // Actual Expenses in Period
-    const filteredExpenses = expenses.filter(exp => {
-      if (exp.status === 'REJECTED' || exp.status === 'CANCELLED') return false;
-      const expDateStr = exp.date || exp.createdAt;
-      if (!expDateStr) return true;
-      const expDate = new Date(expDateStr);
-      if (isNaN(expDate.getTime())) return true;
-      if (dateRange?.start && expDate < dateRange.start) return false;
-      if (dateRange?.end && expDate > dateRange.end) return false;
-      return true;
-    });
-    const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
-
-    // Net Profit = Sales Revenue − COGS − Expenses
-    const grossProfit = totalSales - totalCOGS;
-    const netProfit = grossProfit - totalExpenses;
-
-    return { totalSales, totalCOGS, grossProfit, totalExpenses, netProfit };
-  }, [invoices, products, expenses, dateRange]);
+    return {
+      totalSales: metrics.totalSales,
+      totalCOGS: metrics.totalCOGS,
+      grossProfit: metrics.grossProfit,
+      totalExpenses: metrics.totalExpenses,
+      netProfit: metrics.netProfit,
+      grossMarginPct: metrics.grossMarginPct,
+      netMarginPct: metrics.netMarginPct,
+    };
+  }, [invoices, receipts, products, expenses, dateRange]);
 
   // Overall/Average Turnover value for the stat card
   const overallTurnover = overallStats.overallRatio;

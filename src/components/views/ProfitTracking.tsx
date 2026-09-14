@@ -8,13 +8,15 @@ import {
   TrendingUp, TrendingDown, DollarSign, Package, BarChart3, ArrowRight, 
   Coins, Download, Sparkles, Sliders, Percent, ShieldCheck, Scale, 
   ChevronRight, Filter, Layers, ListFilter, HelpCircle, AlertTriangle,
-  Receipt
+  Receipt, Activity
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { InsightBadge } from '../common/InsightBadge';
+import { ProfitDiagnosticView } from './profit/ProfitDiagnosticView';
+import { formatNetProfitDisplay, formatCompactNumber } from './profit/profitUtils';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#F43F5E', '#8B5CF6', '#06B6D4'];
 
@@ -33,10 +35,14 @@ export function ProfitTracking() {
   const { profile, currency } = useSettings();
   const [dbProducts, setDbProducts] = useState<any[]>([]);
   const [dbInvoices, setDbInvoices] = useState<any[]>([]);
+  const [dbReceipts, setDbReceipts] = useState<any[]>([]);
   const [dbStockMovements, setDbStockMovements] = useState<any[]>([]);
   const [dbExpenses, setDbExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Tab View
+  const [activeTab, setActiveTab] = useState<'overview' | 'diagnostic'>('overview');
+
   // Controls
   const [timeRange, setTimeRange] = useState<'30days' | 'quarter' | 'ytd'>('30days');
   const [activeCategory, setActiveCategory] = useState<string>('All');
@@ -78,6 +84,17 @@ export function ProfitTracking() {
       }
     );
 
+    const receiptsPath = `companies/${profile.companyId}/receipts`;
+    const unsubscribeReceipts = onSnapshot(
+      collection(db, receiptsPath),
+      (snapshot) => {
+        setDbReceipts(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
+      },
+      (error) => {
+        console.error("Error loading receipts for profit tracking:", error);
+      }
+    );
+
     const expensesPath = `companies/${profile.companyId}/expenses`;
     const unsubscribeExpenses = onSnapshot(
       collection(db, expensesPath),
@@ -105,10 +122,18 @@ export function ProfitTracking() {
     return () => {
       unsubscribe();
       unsubscribeInvoices();
+      unsubscribeReceipts();
       unsubscribeExpenses();
       unsubscribeMovements();
     };
   }, [profile?.companyId]);
+
+  // Track how many inventory products lack buyingPrice (diagnostics alert)
+  const diagnosticIssueCount = useMemo(() => {
+    return dbProducts.filter(
+      (p) => !p.buyingPrice && !p.costPrice && !p.value && !p.cost
+    ).length;
+  }, [dbProducts]);
 
   // Use live database products
   const products = useMemo(() => {
@@ -332,6 +357,10 @@ export function ProfitTracking() {
   const profitChange = simulatedAggregates.totalNetProfit - aggregates.totalNetProfit;
   const isProfitPositive = profitChange >= 0;
 
+  // Strict User-Facing Profit/Loss Display Formats
+  const simNetProfitDisplay = formatNetProfitDisplay(simulatedAggregates.totalNetProfit, currency || 'KSh');
+  const baseNetProfitDisplay = formatNetProfitDisplay(aggregates.totalNetProfit, currency || 'KSh');
+
   // Compact currency display helper
   const formatCurrency = (val: number) => {
     const symbol = currency || "KSh";
@@ -440,12 +469,58 @@ export function ProfitTracking() {
         </div>
       </div>
 
-      {/* KPI Performance Scorecard Grid */}
-      <InsightBadge
-        elementId="profit_margin_trajectory"
-        variant="banner"
-        className="w-full"
-      />
+      {/* Primary Tab Switcher */}
+      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
+            activeTab === 'overview'
+              ? 'bg-slate-900 text-white shadow-sm'
+              : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Overview & Margin Models
+        </button>
+
+        <button
+          onClick={() => setActiveTab('diagnostic')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
+            activeTab === 'diagnostic'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+          }`}
+        >
+          <Activity className="w-4 h-4" />
+          COGS & Revenue Diagnostic
+          {diagnosticIssueCount > 0 && (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'diagnostic' ? 'bg-white text-blue-900' : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {diagnosticIssueCount} alerts
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'diagnostic' ? (
+        <ProfitDiagnosticView
+          invoices={dbInvoices}
+          receipts={dbReceipts}
+          products={dbProducts}
+          expenses={dbExpenses}
+          currency={currency || 'KSh'}
+        />
+      ) : (
+        <>
+          {/* KPI Performance Scorecard Grid */}
+          <InsightBadge
+            elementId="profit_margin_trajectory"
+            variant="banner"
+            className="w-full"
+          />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* KPI 1: Gross Sales */}
@@ -508,24 +583,22 @@ export function ProfitTracking() {
 
         {/* KPI 4: Net Profit */}
         <div className={`p-5 rounded-3xl border shadow-sm flex flex-col justify-between transition-all ${
-          simulatedAggregates.totalNetProfit < 0
+          simNetProfitDisplay.type === 'loss'
             ? 'bg-rose-50/70 border-rose-200'
-            : simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit
+            : simNetProfitDisplay.type === 'profit' && simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit
               ? 'bg-emerald-50/20 border-emerald-100'
               : 'bg-amber-50/25 border-amber-100'
         }`}>
           <div className="flex items-center justify-between">
             <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest block ${
-              simulatedAggregates.totalNetProfit < 0 ? 'text-rose-700' : 'text-slate-500'
+              simNetProfitDisplay.type === 'loss' ? 'text-rose-700' : 'text-slate-500'
             }`}>
-              Net Operating Profit
+              {simNetProfitDisplay.type === 'loss' ? 'Operating Loss' : 'Operating Profit'}
             </span>
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-              simulatedAggregates.totalNetProfit < 0
+              simNetProfitDisplay.type === 'loss'
                 ? 'bg-rose-100 text-rose-700'
-                : simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-amber-100 text-amber-700'
+                : 'bg-emerald-100 text-emerald-700'
             }`}>
               <DollarSign className="w-4 h-4" />
             </div>
@@ -533,20 +606,20 @@ export function ProfitTracking() {
           <div className="mt-4">
             <div className="flex items-baseline gap-2">
               <span className={`text-2xl sm:text-3xl font-black ${
-                simulatedAggregates.totalNetProfit < 0 ? 'text-red-600' : 'text-slate-900'
+                simNetProfitDisplay.type === 'loss' ? 'text-red-600' : 'text-slate-900'
               }`}>
-                {formatCurrency(simulatedAggregates.totalNetProfit)}
+                {simNetProfitDisplay.text}
               </span>
               {profitChange !== 0 && (
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-0.5 ${isProfitPositive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                   {isProfitPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {isProfitPositive ? '+' : ''}{formatCurrency(Math.abs(profitChange))}
+                  {isProfitPositive ? '+' : ''}{currency} {formatCompactNumber(Math.abs(profitChange))}
                 </span>
               )}
             </div>
             <p className="text-[10px] text-slate-500 font-medium mt-1" title="Net Profit = Sales Revenue − COGS − Expenses">
-              Normal baseline: <span className={`font-semibold ${aggregates.totalNetProfit < 0 ? 'text-red-600' : 'text-slate-700'}`}>
-                {formatCurrency(aggregates.totalNetProfit)}
+              Normal baseline: <span className={`font-semibold ${baseNetProfitDisplay.type === 'loss' ? 'text-red-600' : 'text-slate-700'}`}>
+                {baseNetProfitDisplay.text}
               </span>
             </p>
           </div>
@@ -723,13 +796,13 @@ export function ProfitTracking() {
               <div className="p-3 bg-slate-800/50 rounded-2xl">
                 <span className="text-[9px] text-slate-400 font-bold block uppercase">Net Profit Result</span>
                 <span className={`text-base font-black ${
-                  simulatedAggregates.totalNetProfit < 0 
+                  simNetProfitDisplay.type === 'loss' 
                     ? 'text-rose-400' 
                     : simulatedAggregates.totalNetProfit >= aggregates.totalNetProfit 
                       ? 'text-emerald-400' 
                       : 'text-amber-400'
                 }`}>
-                  {formatCurrency(simulatedAggregates.totalNetProfit)}
+                  {simNetProfitDisplay.text}
                 </span>
               </div>
               <div className="p-3 bg-slate-800/50 rounded-2xl">
@@ -942,14 +1015,18 @@ export function ProfitTracking() {
                       simProductProfit < 0 ? 'text-red-600' : 'text-slate-900'
                     }`}>
                       {simProductProfit < 0
-                        ? `-${currency}${Math.abs(Math.round(simProductProfit)).toLocaleString()}`
-                        : `${currency}${Math.round(simProductProfit).toLocaleString()}`}
+                        ? `Loss: ${currency} ${Math.abs(Math.round(simProductProfit)).toLocaleString()}`
+                        : simProductProfit > 0
+                        ? `Profit: ${currency} ${Math.round(simProductProfit).toLocaleString()}`
+                        : `Break-even: ${currency} 0`}
                       <span className={`text-[10px] block font-normal ${
                         (p.sellingPrice - p.costOfGoods) * p.volume < 0 ? 'text-red-500' : 'text-slate-400'
                       }`}>
                         Base: {(p.sellingPrice - p.costOfGoods) * p.volume < 0
-                          ? `-${currency}${Math.abs(Math.round((p.sellingPrice - p.costOfGoods) * p.volume)).toLocaleString()}`
-                          : `${currency}${Math.round((p.sellingPrice - p.costOfGoods) * p.volume).toLocaleString()}`}
+                          ? `Loss: ${currency} ${Math.abs(Math.round((p.sellingPrice - p.costOfGoods) * p.volume)).toLocaleString()}`
+                          : (p.sellingPrice - p.costOfGoods) * p.volume > 0
+                          ? `Profit: ${currency} ${Math.round((p.sellingPrice - p.costOfGoods) * p.volume).toLocaleString()}`
+                          : `Break-even: ${currency} 0`}
                       </span>
                     </td>
                   </tr>
@@ -1000,8 +1077,10 @@ export function ProfitTracking() {
                     simProductProfit < 0 ? 'text-red-600' : 'text-slate-900'
                   }`}>
                     {simProductProfit < 0
-                      ? `-${currency}${Math.abs(Math.round(simProductProfit)).toLocaleString()}`
-                      : `${currency}${Math.round(simProductProfit).toLocaleString()}`}
+                      ? `Loss: ${currency} ${Math.abs(Math.round(simProductProfit)).toLocaleString()}`
+                      : simProductProfit > 0
+                      ? `Profit: ${currency} ${Math.round(simProductProfit).toLocaleString()}`
+                      : `Break-even: ${currency} 0`}
                   </span>
                 </div>
               </div>
@@ -1009,6 +1088,8 @@ export function ProfitTracking() {
           })}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -203,7 +203,7 @@ export function getInsightsSnapshot(data: AppDataState): InsightsSnapshot {
       const rev = Number(item.total) || qty * price;
 
       const p = products.find((prod) => prod.id === pId || prod.sku === sku || prod.name === name);
-      const unitCost = Number(p?.buyingPrice || p?.costPrice || p?.value || 0) || price * 0.65;
+      const unitCost = Number(item.buyingPrice ?? item.costPrice ?? item.cost ?? p?.buyingPrice ?? p?.costPrice ?? p?.value ?? 0);
       const cogs = qty * unitCost;
 
       const existing = productSalesMap.get(sku) || {

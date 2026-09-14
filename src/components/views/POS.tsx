@@ -3,7 +3,7 @@ import {
   Search, ShoppingCart, Trash2, Plus, Minus,
   Banknote, Receipt, Package, Loader2, CheckCircle2,
   Scan, Pause, RotateCcw, Smartphone, X, FileText,
-  Coins, UserCheck, AlertCircle, Sparkles,
+  Coins, UserCheck, AlertCircle,
   Keyboard, Users, UserPlus, Phone, Mail, Check,
   ChevronLeft, ChevronRight, ArrowRight, ArrowLeft, Printer,
   Store, Hash, Calendar, DollarSign
@@ -15,7 +15,6 @@ import { handleFirestoreError, OperationType } from '../../lib/firestoreUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { cn } from '../../lib/utils';
-import { InsightBadge } from '../common/InsightBadge';
 
 interface CartItem {
   id: string;
@@ -208,10 +207,22 @@ export function POS() {
     if (typeof product.price === 'number' && product.price > 0) {
       return product.price;
     }
-    if (typeof product.buyingPrice === 'number' && product.buyingPrice > 0) {
-      return Math.round(product.buyingPrice * 1.3);
+    const cost = Number(product.buyingPrice ?? product.costPrice ?? product.value ?? product.cost ?? 0);
+    if (cost > 0) {
+      return Math.round(cost * 1.3);
     }
-    return typeof product.value === 'number' ? product.value : 0;
+    return 0;
+  };
+
+  const getCostPrice = (product: any, calculatedSellPrice: number): number => {
+    const directCost = Number(product.buyingPrice ?? product.costPrice ?? product.value ?? product.cost ?? 0);
+    if (directCost > 0) {
+      return directCost;
+    }
+    if (calculatedSellPrice > 0) {
+      return Math.round(calculatedSellPrice / 1.3);
+    }
+    return 0;
   };
 
   const filteredProducts = useMemo(() => {
@@ -230,6 +241,9 @@ export function POS() {
     const currentStock = typeof product.quantity === 'number' ? product.quantity : 0;
     if (currentStock <= 0) return;
 
+    const sellPrice = getSellingPrice(product);
+    const buyPrice = getCostPrice(product, sellPrice);
+
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
@@ -245,9 +259,9 @@ export function POS() {
       return [...prev, {
         id: product.id,
         name: product.name,
-        price: getSellingPrice(product),
-        buyingPrice: product.buyingPrice || product.value || 0,
-        sellingPrice: getSellingPrice(product),
+        price: sellPrice,
+        buyingPrice: buyPrice,
+        sellingPrice: sellPrice,
         quantity: 1,
         image: product.image,
         category: product.category,
@@ -291,6 +305,9 @@ export function POS() {
   const total = rawTotal;
   const subtotal = Math.round(total / 1.16);
   const tax = total - subtotal;
+  const cartCOGS = cart.reduce((sum, it) => sum + ((it.buyingPrice || 0) * it.quantity), 0);
+  const cartGrossProfit = total - cartCOGS;
+  const cartMarginPct = total > 0 ? (cartGrossProfit / total) * 100 : 0;
 
   const numericTendered = typeof cashTendered === 'number' ? cashTendered : 0;
   const changeDue = Math.max(0, numericTendered - total);
@@ -413,28 +430,57 @@ export function POS() {
     setIsProcessing(true);
     try {
       const receiptId = `RCP-POS-${Date.now()}`;
+      const invoiceId = `INV-POS-${Date.now()}`;
       const finalCustName = customerName.trim() || 'Walk-in Customer';
+
+      // Explicit Cost of Goods Sold (COGS) and Gross Profit calculations
+      const cartCOGS = cart.reduce((sum, it) => sum + ((it.buyingPrice || 0) * it.quantity), 0);
+      const cartGrossProfit = total - cartCOGS;
+      const cartMarginPct = total > 0 ? (cartGrossProfit / total) * 100 : 0;
 
       // 1. Create Receipt Record
       const receiptData = {
         id: receiptId,
         receiptId: receiptId,
+        invoiceId: invoiceId,
         customerName: finalCustName,
         customerPhone: customerPhone.trim(),
-        items: cart.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          sku: item.sku || '',
-          category: item.category || ''
-        })),
+        items: cart.map(item => {
+          const itemCost = item.buyingPrice || 0;
+          const itemPrice = item.price || 0;
+          const itemQty = item.quantity || 1;
+          const itemTotal = itemPrice * itemQty;
+          const itemCOGS = itemCost * itemQty;
+          const itemProfit = itemTotal - itemCOGS;
+          return {
+            id: item.id,
+            productId: item.id,
+            name: item.name,
+            price: itemPrice,
+            sellingPrice: itemPrice,
+            buyingPrice: itemCost,
+            costPrice: itemCost,
+            cost: itemCost,
+            quantity: itemQty,
+            total: itemTotal,
+            cogs: itemCOGS,
+            grossProfit: itemProfit,
+            netProfit: itemProfit,
+            marginPct: itemTotal > 0 ? (itemProfit / itemTotal) * 100 : 0,
+            sku: item.sku || '',
+            category: item.category || ''
+          };
+        }),
         rawTotal,
         discountPercent,
         discountAmount,
         subtotal,
         tax,
         total,
+        cogs: cartCOGS,
+        grossProfit: cartGrossProfit,
+        netProfit: cartGrossProfit,
+        marginPct: cartMarginPct,
         paymentMethod,
         mpesaCode: paymentMethod === 'mpesa' ? mpesaCode : '',
         cashTendered: paymentMethod === 'cash' ? (numericTendered || total) : total,
@@ -473,6 +519,11 @@ export function POS() {
           productName: item.name,
           quantitySold: item.quantity,
           sellingPrice: item.price,
+          buyingPrice: item.buyingPrice || 0,
+          costPrice: item.buyingPrice || 0,
+          cost: item.buyingPrice || 0,
+          cogs: (item.buyingPrice || 0) * item.quantity,
+          grossProfit: (item.price - (item.buyingPrice || 0)) * item.quantity,
           totalAmount: item.quantity * item.price,
           saleDate: new Date().toISOString().split('T')[0],
           customerId: finalCustName,
@@ -522,23 +573,49 @@ export function POS() {
         source: 'POS'
       });
 
-      // 4. Generate Paid Invoice
-      const invoiceId = `INV-POS-${Date.now()}`;
+      // 4. Generate Paid Invoice (linked with receiptId for unified tracking)
       const invoiceData = {
         id: invoiceId,
+        invoiceId: invoiceId,
         customer: finalCustName,
         amount: total,
+        total: total,
+        rawTotal: rawTotal,
+        discountAmount: discountAmount,
+        discountPercent: discountPercent,
+        cogs: cartCOGS,
+        grossProfit: cartGrossProfit,
+        netProfit: cartGrossProfit,
+        marginPct: cartMarginPct,
         status: 'paid',
         type: 'standard',
         date: new Date().toISOString().split('T')[0],
         dueDate: new Date().toISOString().split('T')[0],
-        items: cart.map(item => ({
-          productId: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          sku: item.sku || ''
-        })),
+        items: cart.map(item => {
+          const itemCost = item.buyingPrice || 0;
+          const itemPrice = item.price || 0;
+          const itemQty = item.quantity || 1;
+          const itemTotal = itemPrice * itemQty;
+          const itemCOGS = itemCost * itemQty;
+          const itemProfit = itemTotal - itemCOGS;
+          return {
+            id: item.id,
+            productId: item.id,
+            name: item.name,
+            quantity: itemQty,
+            price: itemPrice,
+            sellingPrice: itemPrice,
+            buyingPrice: itemCost,
+            costPrice: itemCost,
+            cost: itemCost,
+            total: itemTotal,
+            cogs: itemCOGS,
+            grossProfit: itemProfit,
+            netProfit: itemProfit,
+            marginPct: itemTotal > 0 ? (itemProfit / itemTotal) * 100 : 0,
+            sku: item.sku || ''
+          };
+        }),
         createdAt: new Date().toISOString(),
         createdBy: user.uid,
         source: 'POS',
@@ -658,13 +735,6 @@ export function POS() {
               </div>
             </div>
           </div>
-
-          {/* Dynamic Intelligence Telemetry */}
-          <InsightBadge
-            elementId="sales_revenue_velocity"
-            variant="compact"
-            className="w-full"
-          />
 
           {/* Search Bar & Scan Button */}
           <div className="flex items-center gap-3 min-w-0 shrink-0">
@@ -1001,7 +1071,7 @@ export function POS() {
                 <span>VAT (16%)</span>
                 <span className="font-medium text-[#1a1c20]">{currency} {tax.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
-              <div className="flex justify-between items-center pt-2">
+              <div className="flex justify-between items-center pt-2 border-t border-[#e4e6e9]">
                 <span className="text-base sm:text-lg font-bold text-[#1a1c20]">Total payable</span>
                 <span className="text-xl sm:text-2xl font-bold text-[#1a1c20]">
                   {currency} {total.toLocaleString(undefined, { maximumFractionDigits: 0 })}

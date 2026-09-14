@@ -193,7 +193,8 @@ export function Demand() {
       if (items.length === 0) {
         const amt = Number(inv.amount) || 0;
         totalDemandSales += amt;
-        totalDemandCOGS += amt * 0.65;
+        const recordedCogs = Number(inv.cogs ?? inv.cost ?? 0);
+        totalDemandCOGS += recordedCogs;
       } else {
         items.forEach((it: any) => {
           if (filteredProds.length < enrichedProducts.length && !activeIds.has(it.productId)) return;
@@ -205,10 +206,7 @@ export function Demand() {
           totalDemandSales += lineTotal;
 
           const prod = enrichedProducts.find(p => p.id === it.productId || p.sku === it.sku);
-          let unitCost = Number(prod?.buyingPrice || prod?.value || it.buyingPrice || it.cost || 0);
-          if (unitCost <= 0) {
-            unitCost = price > 0 ? price * 0.65 : lineTotal * 0.65;
-          }
+          const unitCost = Number(it.buyingPrice ?? it.costPrice ?? it.cost ?? prod?.buyingPrice ?? prod?.costPrice ?? prod?.value ?? 0);
           totalDemandCOGS += qty * unitCost;
 
           if (it.productId) {

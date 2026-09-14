@@ -46,6 +46,7 @@ export function SalesAnalytics() {
 
   // Raw State Streams
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [receipts, setReceipts] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,6 +77,9 @@ export function SalesAnalytics() {
     const unsubInvoices = onSnapshot(collection(db, `${basePath}/invoices`), (snap) => {
       setInvoices(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
+    const unsubReceipts = onSnapshot(collection(db, `${basePath}/receipts`), (snap) => {
+      setReceipts(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
     const unsubProducts = onSnapshot(collection(db, `${basePath}/products`), (snap) => {
       setProducts(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
@@ -87,6 +91,7 @@ export function SalesAnalytics() {
 
     return () => {
       unsubInvoices();
+      unsubReceipts();
       unsubProducts();
       unsubExpenses();
       clearTimeout(timer);
@@ -96,9 +101,42 @@ export function SalesAnalytics() {
   // Standardize, enrich and clean raw records with Profit metrics
   const standardizedRecords = useMemo(() => {
     const list: SaleRecord[] = [];
-    const salesInvoices = invoices.filter(inv => inv.type === 'standard' || !inv.type);
+    const processedKeys = new Set<string>();
+    const consolidatedList: any[] = [];
 
-    salesInvoices.forEach(inv => {
+    // 1. Process POS receipts
+    receipts.forEach(rcp => {
+      const status = String(rcp.status || '').toLowerCase();
+      if (status === 'voided' || status === 'cancelled') return;
+      const rKey = rcp.id || rcp.receiptId || rcp.receiptNumber;
+      if (rKey) {
+        processedKeys.add(String(rKey));
+        if (rcp.invoiceId) processedKeys.add(String(rcp.invoiceId));
+      }
+      consolidatedList.push({
+        ...rcp,
+        source: 'POS',
+        invoiceId: rcp.receiptNumber || rcp.receiptId || rcp.id,
+      });
+    });
+
+    // 2. Process invoices (deduplicated against POS receipts)
+    invoices.filter(inv => inv.type === 'standard' || !inv.type).forEach(inv => {
+      const status = String(inv.status || '').toLowerCase();
+      if (status === 'void' || status === 'cancelled' || status === 'rejected') return;
+      const invId = inv.id;
+      const rcpRef = inv.receiptId || inv.receiptNumber;
+      if ((invId && processedKeys.has(String(invId))) || (rcpRef && processedKeys.has(String(rcpRef)))) {
+        return;
+      }
+      if (invId) processedKeys.add(String(invId));
+      consolidatedList.push({
+        ...inv,
+        source: 'Invoice',
+      });
+    });
+
+    consolidatedList.forEach(inv => {
       const dateStr = inv.date || inv.createdAt?.substring(0, 10) || new Date().toISOString().substring(0, 10);
       const timeStr = inv.time || '12:00';
       const hour = parseInt(timeStr.split(':')[0]) || 12;
@@ -126,7 +164,7 @@ export function SalesAnalytics() {
       if (items.length === 0) {
         // Handle invoice with flat amounts
         const amount = Number(inv.amount) || 0;
-        const cogs = amount * 0.65; // Standard 65% cost basis
+        const cogs = Number(inv.cogs ?? inv.cost ?? 0);
         const grossProfit = amount - cogs;
         recordsWithTarget(amount, cogs, grossProfit, 1, 'GEN-01', 'General Merchandise', 'Uncategorized', 'Generic', 'Generic Supply');
       } else {
@@ -135,16 +173,13 @@ export function SalesAnalytics() {
           const price = Number(it.price || it.unitPrice) || 0;
           const net = qty * price;
           
-          const prod = products.find(p => p.id === it.productId || p.name === it.name);
+          const prod = products.find(p => p.id === it.productId || p.sku === it.sku || p.name === it.name);
           const pName = prod?.name || it.name || 'Unnamed Product';
           const pCat = prod?.category || 'General';
           const pBrand = prod?.brand || 'Generic Brand';
           const pSupplier = prod?.supplier || 'Generic Supplier';
 
-          let unitCost = Number(prod?.buyingPrice || prod?.value || it.buyingPrice || it.cost || 0);
-          if (unitCost <= 0) {
-            unitCost = price > 0 ? price * 0.65 : net * 0.65;
-          }
+          const unitCost = Number(it.buyingPrice ?? it.costPrice ?? it.cost ?? prod?.buyingPrice ?? prod?.costPrice ?? prod?.value ?? 0);
           const cogs = qty * unitCost;
           const grossProfit = net - cogs;
 
@@ -180,7 +215,7 @@ export function SalesAnalytics() {
     });
 
     return list;
-  }, [invoices, products]);
+  }, [invoices, receipts, products]);
 
   // Dimension values lists for dropdown filters
   const uniqueDimensions = useMemo(() => {
@@ -856,27 +891,26 @@ export function SalesAnalytics() {
               <span className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 ${
                 metrics.netProfit < 0 ? 'text-rose-300' : 'text-slate-300'
               }`}>
-                <Wallet className={`w-3.5 h-3.5 ${metrics.netProfit < 0 ? 'text-rose-400' : 'text-amber-400'}`} /> Net Profit
+                <Wallet className={`w-3.5 h-3.5 ${metrics.netProfit < 0 ? 'text-rose-400' : 'text-amber-400'}`} />
+                {metrics.netProfit < 0 ? 'Net Loss' : metrics.netProfit === 0 ? 'Break-even' : 'Net Profit'}
               </span>
               <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full uppercase border ${
                 metrics.netProfit < 0
                   ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                   : 'bg-amber-400/20 text-amber-300 border-amber-400/30'
               }`}>
-                {metrics.netMarginPct.toFixed(1)}% Net Margin
+                {Math.abs(metrics.netMarginPct).toFixed(1)}% {metrics.netProfit < 0 ? 'Loss Margin' : 'Net Margin'}
               </span>
             </div>
-            <p className={`text-3xl font-black tracking-tight ${metrics.netProfit < 0 ? 'text-red-400' : 'text-white'}`}>
-              {metrics.netProfit < 0
-                ? `-${currency}${Math.abs(Math.round(metrics.netProfit)).toLocaleString()}`
-                : `${currency}${Math.round(metrics.netProfit).toLocaleString()}`}
+            <p className={`text-3xl font-black tracking-tight ${metrics.netProfit < 0 ? 'text-rose-400' : 'text-white'}`}>
+              {currency}{Math.abs(Math.round(metrics.netProfit)).toLocaleString()}
             </p>
           </div>
           <div className={`mt-4 pt-3 border-t flex items-center justify-between text-xs font-bold ${
             metrics.netProfit < 0 ? 'border-rose-900/60 text-rose-200/80' : 'border-slate-700/60 text-slate-300'
           }`} title="Net Profit = Sales Revenue − COGS − Expenses">
             <span>Formula</span>
-            <span>Revenue - COGS - Expenses</span>
+            <span>{metrics.netProfit < 0 ? 'COGS + Expenses > Revenue' : 'Revenue - COGS - Expenses'}</span>
           </div>
         </div>
       </div>

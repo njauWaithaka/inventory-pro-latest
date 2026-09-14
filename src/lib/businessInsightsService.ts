@@ -82,7 +82,7 @@ export function calculateGoldenProducts(
       const rev = Number(item.total) || qty * price;
       
       const p = products.find(prod => prod.id === pId || prod.sku === item.sku || prod.name === item.name);
-      const unitCost = Number(p?.buyingPrice || p?.costPrice || p?.value || 0) || (price * 0.65);
+      const unitCost = Number(item.buyingPrice ?? item.costPrice ?? item.cost ?? p?.buyingPrice ?? p?.costPrice ?? p?.value ?? 0);
       const cogs = qty * unitCost;
 
       const existing = productSalesMap.get(pId) || { unitsSold: 0, revenue: 0, cogs: 0 };
@@ -261,7 +261,8 @@ export function calculateProfitInsights(
     
     if (items.length === 0) {
       totalRevenue += amt;
-      totalCOGS += amt * 0.65;
+      const recordedCogs = Number(inv.cogs ?? inv.cost ?? 0);
+      totalCOGS += recordedCogs;
     } else {
       items.forEach((it: any) => {
         const qty = Number(it.quantity) || 1;
@@ -270,7 +271,7 @@ export function calculateProfitInsights(
         totalRevenue += lineTotal;
 
         const prod = products.find(p => p.id === it.productId || p.sku === it.sku || p.name === it.name);
-        const unitCost = Number(prod?.buyingPrice || prod?.costPrice || prod?.value || 0) || (price * 0.65);
+        const unitCost = Number(it.buyingPrice ?? it.costPrice ?? it.cost ?? prod?.buyingPrice ?? prod?.costPrice ?? prod?.value ?? 0);
         totalCOGS += qty * unitCost;
       });
     }
@@ -294,7 +295,7 @@ export function calculateProfitInsights(
       const qty = Number(it.quantity) || 1;
       const price = Number(it.price || it.unitPrice) || 0;
       const prod = products.find(p => p.id === it.productId || p.sku === it.sku || p.name === it.name);
-      const unitCost = Number(prod?.buyingPrice || prod?.costPrice || prod?.value || 0) || (price * 0.65);
+      const unitCost = Number(it.buyingPrice ?? it.costPrice ?? it.cost ?? prod?.buyingPrice ?? prod?.costPrice ?? prod?.value ?? 0);
       const profit = qty * (price - unitCost);
 
       const existing = productProfitMap.get(name) || { name, profit: 0 };

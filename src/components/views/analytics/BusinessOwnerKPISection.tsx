@@ -146,13 +146,13 @@ export function BusinessOwnerKPISection({
           <div className="mt-3">
             <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${
               netProfitComparison.current < 0 ? 'text-rose-700' : 'text-slate-400'
-            }`}>Net Profit</p>
+            }`}>
+              {netProfitComparison.current < 0 ? 'Loss' : 'Net Profit'}
+            </p>
             <p className={`text-lg sm:text-2xl font-black mt-0.5 tracking-tight ${
               netProfitComparison.current < 0 ? 'text-red-600' : 'text-slate-900'
             }`}>
-              {netProfitComparison.current < 0
-                ? `-${currency}${Math.abs(Math.round(netProfitComparison.current)).toLocaleString()}`
-                : `${currency}${Math.round(netProfitComparison.current).toLocaleString()}`}
+              {currency}{Math.abs(Math.round(netProfitComparison.current)).toLocaleString()}
             </p>
             <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mt-1" title="Net Profit = Sales Revenue − COGS − Expenses">
               <span>Expenses: {currency}{Math.round(analytics.expensesComparison?.current ?? 0).toLocaleString()}</span>

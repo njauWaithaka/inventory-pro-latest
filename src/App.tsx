@@ -436,7 +436,9 @@ function AppContent() {
       </div>
 
       <BottomNav currentView={currentView} onViewChange={setCurrentView} />
-      {currentView !== 'inventory_pro_chat' && <InventoryProFloatingWidget onNavigate={setCurrentView} />}
+      {currentView !== 'inventory_pro_chat' && currentView !== 'pos' && (
+        <InventoryProFloatingWidget onNavigate={setCurrentView} />
+      )}
     </div>
   );
 }
