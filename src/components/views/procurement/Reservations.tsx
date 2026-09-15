@@ -939,7 +939,7 @@ export function Reservations({ onNavigate }: ReservationsProps) {
               )}
 
               <div className="text-center pt-2 text-[9px] text-slate-400 uppercase tracking-widest">
-                Generated via Invenio Cloud ERP • Stock locked from general pool
+                Generated via Aquivo Cloud ERP • Stock locked from general pool
               </div>
             </div>
 

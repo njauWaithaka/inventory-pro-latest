@@ -12,40 +12,26 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAnonymous() {
+      return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function incoming() {
-      return request.resource.data;
+    function isDemoCompany(companyId) {
+      return isValidId(companyId) && (companyId == 'demo_workspace' || companyId.matches('^demo_.*'));
     }
 
-    function existing() {
-      return resource.data;
-    }
-
-    // Validation blueprints for company entities
-    function isValidProduct(data) {
-      return data.name is string && data.name.size() <= 150
-        && (data.sku == null || (data.sku is string && data.sku.size() <= 64))
-        && (data.quantity == null || data.quantity is number)
-        && (data.buyingPrice == null || data.buyingPrice is number);
-    }
-
-    function isValidInvoice(data) {
-      return data.amount is number
-        && (data.customer == null || (data.customer is string && data.customer.size() <= 200))
-        && (data.items == null || data.items is list);
-    }
-
-    function isValidBOM(data) {
-      return data.name is string && data.name.size() <= 200
-        && (data.components == null || data.components is list);
-    }
-
-    function isValidProductionOrder(data) {
-      return data.status is string && data.status.size() <= 64
-        && (data.quantity == null || data.quantity is number);
+    // Anonymous visitors can access their own isolated demo workspace (where companyId == request.auth.uid)
+    // Non-anonymous users can access authenticated companies
+    // Unauthenticated guest demo sessions can access demo workspaces matching demo_* or demo_workspace
+    function isAllowedCompany(companyId) {
+      return (isSignedIn() && (
+        (isAnonymous() && request.auth.uid == companyId) ||
+        (!isAnonymous())
+      )) || isDemoCompany(companyId);
     }
 
     // Health check endpoint for test connection
@@ -53,56 +39,24 @@ service cloud.firestore {
       allow read: if true;
     }
 
-    // User profile access
+    // User profile access:
+    // Anonymous users can only access their own user document
+    // Registered users can read team profiles and write their own
+    // Guest demo users can read and write their isolated demo user profile
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId;
+      allow read: if (isSignedIn() && (request.auth.uid == userId || !isAnonymous())) || userId.matches('^demo_.*');
+      allow write: if (isSignedIn() && request.auth.uid == userId) || userId.matches('^demo_.*');
     }
 
     // Core rule matchers for Company scoping
     match /companies/{companyId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read: if isAllowedCompany(companyId);
+      allow write: if isAllowedCompany(companyId);
 
-      // Products subcollection rules
-      match /products/{productId} {
-        allow read: if true;
-        allow create, update: if isValidId(productId) && isValidProduct(incoming());
-        allow delete: if isSignedIn();
-      }
-
-      // Invoices subcollection rules
-      match /invoices/{invoiceId} {
-        allow read: if true;
-        allow create, update: if isValidId(invoiceId) && isValidInvoice(incoming());
-        allow delete: if isSignedIn();
-      }
-
-      // Purchase Orders subcollection rules
-      match /purchaseOrders/{poId} {
-        allow read: if true;
-        allow create, update: if isValidId(poId) && incoming().items is list;
-        allow delete: if isSignedIn();
-      }
-
-      // BOMs subcollection rules
-      match /boms/{bomId} {
-        allow read: if true;
-        allow create, update: if isValidId(bomId) && isValidBOM(incoming());
-        allow delete: if isSignedIn();
-      }
-
-      // Production orders subcollection rules
-      match /production_orders/{orderId} {
-        allow read: if true;
-        allow create, update: if isValidId(orderId) && isValidProductionOrder(incoming());
-        allow delete: if isSignedIn();
-      }
-
-      // Catch-all for any other production-hub subcollections
-      match /{allSubcollections=**} {
-        allow read: if true;
-        allow write: if isSignedIn();
+      // All subcollections inside the company (products, sales, receipts, invoices, etc.)
+      match /{subcollection}/{docId} {
+        allow read: if isAllowedCompany(companyId);
+        allow write: if isAllowedCompany(companyId);
       }
     }
   }

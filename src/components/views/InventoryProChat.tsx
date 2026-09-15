@@ -18,16 +18,18 @@ import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 
 /* ============================================================================
-   INVENIO INTELLIGENCE
+   AQUIVO INTELLIGENCE
    A command-driven AI command center and interactive intelligence hub.
    ========================================================================== */
 
-interface InvenioIntelligenceProps {
+interface AquivoIntelligenceProps {
   isFloating?: boolean;
   onClose?: () => void;
   onNavigate?: (view: ViewType) => void;
   defaultOpen?: boolean;
 }
+
+type InvenioIntelligenceProps = AquivoIntelligenceProps;
 
 export interface SupplierItem {
   id: string;
@@ -504,12 +506,12 @@ function AIThinking({ title }: { title: string }) {
    MAIN INVENIO INTELLIGENCE COMPONENT
    ========================================================================== */
 
-export function InvenioIntelligence({
+export function AquivoIntelligence({
   isFloating = false,
   onClose,
   onNavigate,
   defaultOpen = true
-}: InvenioIntelligenceProps) {
+}: AquivoIntelligenceProps) {
   const { profile, company, currency: contextCurrency } = useSettings();
   const companyId = profile?.companyId || company?.id || '';
   const currencySymbol = company?.currency || contextCurrency || '$';
@@ -677,7 +679,7 @@ export function InvenioIntelligence({
         body: JSON.stringify({
           message: promptToAsk,
           contextData: {
-            companyName: company?.name || "Invenio Business",
+            companyName: company?.name || "Aquivo Business",
             currency: currencySymbol,
             totalProducts: products.length,
             stockoutCount: issues.stockouts.length,
@@ -1133,7 +1135,7 @@ export function InvenioIntelligence({
 
       {/* Floating launcher trigger */}
       {!open && isFloating && (
-        <button className="ii-launcher" onClick={() => setOpen(true)} title="Open Invenio Intelligence">
+        <button className="ii-launcher" onClick={() => setOpen(true)} title="Open Aquivo Intelligence">
           <Sparkles size={20} />
         </button>
       )}
@@ -1148,7 +1150,7 @@ export function InvenioIntelligence({
               <div className="ii-header-left">
                 <span className={`ii-status-dot ${view === "loading" ? "ii-status-dot-active" : ""}`} />
                 <div>
-                  <div className="ii-header-title"><Sparkles size={16} className="text-emerald-700" /> Invenio Intelligence</div>
+                  <div className="ii-header-title"><Sparkles size={16} className="text-emerald-700" /> Aquivo Intelligence</div>
                   <div className="ii-header-sub">Your business, analyzed automatically.</div>
                 </div>
               </div>
@@ -1360,8 +1362,8 @@ export function InvenioIntelligence({
    EXPORTS FOR COMPATIBILITY
    ========================================================================== */
 
-export function InventoryProChat(props: InvenioIntelligenceProps) {
-  return <InvenioIntelligence {...props} isFloating={false} />;
+export function InventoryProChat(props: AquivoIntelligenceProps) {
+  return <AquivoIntelligence {...props} isFloating={false} />;
 }
 
 export function InventoryProFloatingWidget({ onNavigate }: { onNavigate?: (view: ViewType) => void }) {
@@ -1373,7 +1375,7 @@ export function InventoryProFloatingWidget({ onNavigate }: { onNavigate?: (view:
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-40 w-13 h-13 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all outline-none"
-          title="Open Invenio Intelligence"
+          title="Open Aquivo Intelligence"
         >
           <Sparkles className="w-6 h-6" />
         </button>
@@ -1389,7 +1391,7 @@ export function InventoryProFloatingWidget({ onNavigate }: { onNavigate?: (view:
             className="fixed inset-0 z-50 pointer-events-none"
           >
             <div className="pointer-events-auto w-full h-full">
-              <InvenioIntelligence isFloating onClose={() => setIsOpen(false)} onNavigate={onNavigate} />
+              <AquivoIntelligence isFloating onClose={() => setIsOpen(false)} onNavigate={onNavigate} />
             </div>
           </motion.div>
         )}
@@ -1398,7 +1400,8 @@ export function InventoryProFloatingWidget({ onNavigate }: { onNavigate?: (view:
   );
 }
 
-export default InvenioIntelligence;
+export const InvenioIntelligence = AquivoIntelligence;
+export default AquivoIntelligence;
 
 /* ============================================================================
    STYLES

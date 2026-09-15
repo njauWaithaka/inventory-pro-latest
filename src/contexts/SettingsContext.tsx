@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { doc, getDoc, setDoc, onSnapshot, collection, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
+import { isDemoWorkspaceInitialized, seedDemoWorkspace, resetDemoWorkspace } from '../lib/demoService';
 
 // Realistic exchange rates relative to USD ($) as base
 const EXCHANGE_RATES: Record<string, number> = {
@@ -27,6 +28,8 @@ export interface UserProfile {
   role: string;
   companyId: string | null;
   hasConfigured: boolean;
+  isDemo?: boolean;
+  accountType?: 'demo' | 'standard';
 }
 
 export interface Company {
@@ -40,15 +43,20 @@ export interface Company {
   kraPin?: string;
   address?: string;
   phone?: string;
+  isDemo?: boolean;
+  demoInitialized?: boolean;
+  accountType?: 'demo' | 'standard';
 }
 
 interface SettingsContextType {
   profile: UserProfile | null;
   company: Company | null;
   loading: boolean;
+  isDemo: boolean;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   updateCompany: (updates: Partial<Company>) => Promise<void>;
   createCompany: (name: string) => Promise<string>;
+  resetDemo: () => Promise<void>;
   settings: UserProfile | null; // For backward compatibility
   currency: string;
 }
@@ -56,10 +64,14 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, isDemo: isAuthDemo } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
+  const isSeedingRef = useRef(false);
+
+  const isKenya = typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone?.toLowerCase().includes('nairobi');
+  const defaultCurrency = isKenya ? 'KSh' : '$';
 
   useEffect(() => {
     if (!user) {
@@ -71,46 +83,97 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     setLoading(true);
     const userRef = doc(db, 'users', user.uid);
-    
-    const unsubscribeUser = onSnapshot(userRef, async (userSnap) => {
-      if (userSnap.exists()) {
-        const userData = userSnap.data() as UserProfile;
-        setProfile(userData);
 
-        if (userData.companyId) {
-          const companyRef = doc(db, 'companies', userData.companyId);
-          const companySnap = await getDoc(companyRef);
-          if (companySnap.exists()) {
-            setCompany({ ...companySnap.data(), id: companySnap.id } as Company);
+    const unsubscribeUser = onSnapshot(userRef, async (userSnap) => {
+      try {
+        if (userSnap.exists()) {
+          const userData = userSnap.data() as UserProfile;
+          setProfile(userData);
+
+          const targetCompanyId = userData.companyId || (user.isDemo ? user.uid : null);
+
+          if (targetCompanyId) {
+            const companyRef = doc(db, 'companies', targetCompanyId);
+            const companySnap = await getDoc(companyRef);
+
+            if (companySnap.exists()) {
+              const compData = { ...companySnap.data(), id: companySnap.id } as Company;
+              // If demo user but not initialized yet, seed it
+              if (user.isDemo && !compData.demoInitialized && !isSeedingRef.current) {
+                isSeedingRef.current = true;
+                await seedDemoWorkspace(user.uid, defaultCurrency);
+                isSeedingRef.current = false;
+              }
+              setCompany(compData);
+            } else if (user.isDemo && !isSeedingRef.current) {
+              // Create demo company
+              isSeedingRef.current = true;
+              await seedDemoWorkspace(user.uid, defaultCurrency);
+              isSeedingRef.current = false;
+              const refreshedSnap = await getDoc(companyRef);
+              if (refreshedSnap.exists()) {
+                setCompany({ ...refreshedSnap.data(), id: refreshedSnap.id } as Company);
+              }
+            } else {
+              setCompany(null);
+            }
+          } else if (user.isDemo && !isSeedingRef.current) {
+            isSeedingRef.current = true;
+            await seedDemoWorkspace(user.uid, defaultCurrency);
+            isSeedingRef.current = false;
+          } else {
+            setCompany(null);
           }
         } else {
-          setCompany(null);
+          // Initial profile creation
+          if (user.isDemo && !isSeedingRef.current) {
+            isSeedingRef.current = true;
+            await seedDemoWorkspace(user.uid, defaultCurrency);
+            isSeedingRef.current = false;
+          } else {
+            const initialProfile: UserProfile = {
+              userId: user.uid,
+              name: user.displayName || '',
+              email: user.email || '',
+              role: 'Owner',
+              companyId: null,
+              hasConfigured: false
+            };
+            await setDoc(userRef, initialProfile);
+            setProfile(initialProfile);
+            setCompany(null);
+          }
         }
-      } else {
-        // Initial profile creation
-        const initialProfile: UserProfile = {
-          userId: user.uid,
-          name: user.displayName || '',
-          email: user.email || '',
-          role: 'Owner',
-          companyId: null,
-          hasConfigured: false
-        };
-        await setDoc(userRef, initialProfile);
-        setProfile(initialProfile);
-        setCompany(null);
+      } catch (err) {
+        console.error("Error setting up user / demo profile:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }, (error) => {
       console.error("Error fetching user profile:", error);
       setLoading(false);
     });
 
     return () => unsubscribeUser();
-  }, [user]);
+  }, [user, defaultCurrency]);
 
-  const isKenya = typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone?.toLowerCase().includes('nairobi');
-  const defaultCurrency = isKenya ? 'KSh' : '$';
+  const resetDemo = async () => {
+    if (!user || !user.isDemo) return;
+    setLoading(true);
+    try {
+      await resetDemoWorkspace(user.uid, company?.currency || defaultCurrency);
+      // Re-fetch company
+      const companyRef = doc(db, 'companies', user.uid);
+      const companySnap = await getDoc(companyRef);
+      if (companySnap.exists()) {
+        setCompany({ ...companySnap.data(), id: companySnap.id } as Company);
+      }
+    } catch (err) {
+      console.error("Error resetting demo workspace:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!user) return;
@@ -310,15 +373,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   } as any : null;
 
   const currency = company?.currency || defaultCurrency;
+  const isDemo = Boolean(isAuthDemo || user?.isDemo || company?.isDemo);
 
   return (
     <SettingsContext.Provider value={{ 
       profile, 
       company, 
       loading, 
+      isDemo,
       updateProfile, 
       updateCompany, 
       createCompany, 
+      resetDemo,
       settings,
       currency 
     }}>

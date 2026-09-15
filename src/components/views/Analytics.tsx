@@ -91,9 +91,9 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
 
   const handleExportExecutiveSummaryCSV = () => {
     const dateStr = new Date().toISOString().split('T')[0];
-    const companyName = company?.name || 'Invenio Workspace';
+    const companyName = company?.name || 'Aquivo Workspace';
     
-    let csv = `INVENIO EXECUTIVE INVENTORY & FINANCIAL ANALYTICS REPORT\n`;
+    let csv = `AQUIVO EXECUTIVE INVENTORY & FINANCIAL ANALYTICS REPORT\n`;
     csv += `Organization,${companyName}\n`;
     csv += `Reporting Period,${selectedPeriod}\n`;
     csv += `Currency,${currency}\n`;
@@ -137,7 +137,7 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
       csv += `"${item.name.replace(/"/g, '""')}",${item.quantity},${item.price.toFixed(2)},${item.tiedUpCapital.toFixed(2)}\n`;
     });
 
-    downloadFile('\uFEFF' + csv, `Invenio_Executive_Analytics_${selectedPeriod.replace(/\s+/g, '_')}_${dateStr}.csv`, 'text/csv;charset=utf-8;');
+    downloadFile('\uFEFF' + csv, `Aquivo_Executive_Analytics_${selectedPeriod.replace(/\s+/g, '_')}_${dateStr}.csv`, 'text/csv;charset=utf-8;');
     showToast('Executive Summary CSV downloaded successfully!');
   };
 
@@ -154,7 +154,7 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
       csv += `"${cleanSKU}","${cleanName}","${cleanCat}",${stat.currentStock},${stat.costPrice.toFixed(2)},${stat.sellingPrice.toFixed(2)},${totalVal},${stat.unitsSold},${stat.beginningStock},${stat.endingStock},${stat.averageStock},${stat.cogs.toFixed(2)},${stat.turnoverRatio.toFixed(2)}x,"${stat.speed}"\n`;
     });
 
-    downloadFile('\uFEFF' + csv, `Invenio_Product_Velocity_Ledger_${dateStr}.csv`, 'text/csv;charset=utf-8;');
+    downloadFile('\uFEFF' + csv, `Aquivo_Product_Velocity_Ledger_${dateStr}.csv`, 'text/csv;charset=utf-8;');
     showToast('Product Velocity Ledger CSV downloaded successfully!');
   };
 
@@ -162,7 +162,7 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
     const dateStr = new Date().toISOString().split('T')[0];
     const exportPayload = {
       metadata: {
-        workspace: company?.name || 'Invenio',
+        workspace: company?.name || 'Aquivo',
         currency: currency,
         period: selectedPeriod,
         exportedAt: new Date().toISOString(),
@@ -173,7 +173,7 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
     };
 
     const jsonStr = JSON.stringify(exportPayload, null, 2);
-    downloadFile(jsonStr, `Invenio_Analytics_Payload_${dateStr}.json`, 'application/json;charset=utf-8;');
+    downloadFile(jsonStr, `Aquivo_Analytics_Payload_${dateStr}.json`, 'application/json;charset=utf-8;');
     showToast('Raw Analytics JSON exported successfully!');
   };
 
@@ -184,7 +184,7 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
       return;
     }
 
-    const companyName = company?.name || 'Invenio Inventory';
+    const companyName = company?.name || 'Aquivo Inventory';
     const reportDate = new Date().toLocaleDateString('en-US', { dateStyle: 'full' });
 
     const html = `
@@ -339,7 +339,7 @@ export function Analytics({ defaultTab }: AnalyticsProps = {}) {
         </table>
 
         <div class="footer">
-          <span>Invenio Business Intelligence Platform</span>
+          <span>Aquivo Business Intelligence Platform</span>
           <span>Confidential — For Internal Management Use Only</span>
         </div>
 

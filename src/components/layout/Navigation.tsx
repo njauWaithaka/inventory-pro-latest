@@ -67,6 +67,9 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { collection, onSnapshot, doc, setDoc, writeBatch } from "firebase/firestore";
 import { db } from "../../lib/firebase";
+import { AccountConversionModal } from "../demo/AccountConversionModal";
+import { ResetDemoModal } from "../demo/ResetDemoModal";
+import { ConnectionStatusIndicator } from "./ConnectionStatusIndicator";
 
 interface SidebarProps {
   currentView: ViewType;
@@ -359,7 +362,7 @@ export function Sidebar({
                 className="overflow-hidden whitespace-nowrap"
               >
                 <h1 className="text-lg font-extrabold text-white leading-none">
-                  InventoryPro
+                  Aquivo
                 </h1>
                 <p className="text-[10px] text-slate-500 font-medium mt-1 uppercase tracking-wider">
                   Smart Decisions
@@ -503,12 +506,16 @@ export function Navbar({
 }) {
   const { user, logout } = useAuth();
   const { profile, company } = useSettings();
-  const title = profile?.name || user?.displayName || user?.email?.split("@")[0] || "User";
+  const isDemo = Boolean(user?.isDemo || user?.isAnonymous);
+  const title = profile?.name || user?.displayName || (isDemo ? "Demo Guest" : (user?.email?.split("@")[0] || "User"));
   const [activeAlertCount, setActiveAlertCount] = useState(0);
   const [alertsList, setAlertsList] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showConversionModal, setShowConversionModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [conversionInitialMode, setConversionInitialMode] = useState<'register' | 'login'>('register');
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   const notifRef = useRef<HTMLDivElement>(null);
@@ -615,7 +622,10 @@ export function Navbar({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4 ml-4">
+        <div className="flex items-center gap-2 sm:gap-3 ml-4">
+          {/* Real-time Connection & Sync Latency Indicator */}
+          <ConnectionStatusIndicator isPOS={isPOS} />
+
           {/* Notifications Bell with Interactive Popover */}
           <div className="relative" ref={notifRef}>
             <button 
@@ -872,7 +882,7 @@ export function Navbar({
                       className="w-full px-3 py-2 rounded-xl hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors text-left cursor-pointer"
                     >
                       <Sparkles className="w-4 h-4 text-blue-500" />
-                      <span className="font-bold">Invenio Intelligence AI</span>
+                      <span className="font-bold">Aquivo Intelligence AI</span>
                     </button>
 
                     <button
@@ -884,6 +894,46 @@ export function Navbar({
                     </button>
                   </div>
 
+                  {/* Demo Conversion & Reset Options if in Demo Mode */}
+                  {isDemo && (
+                    <div className="p-2 border-t border-slate-100 bg-blue-50/40 space-y-1">
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          setConversionInitialMode('register');
+                          setShowConversionModal(true);
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white flex items-center gap-2.5 transition-all text-xs font-bold text-left cursor-pointer shadow-xs"
+                      >
+                        <Sparkles className="w-4 h-4 text-blue-200" />
+                        <span>Save Workspace (Register)</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          setShowResetModal(true);
+                        }}
+                        className="w-full px-3 py-2 rounded-xl text-amber-700 hover:bg-amber-50 flex items-center gap-2.5 transition-colors text-xs font-semibold text-left cursor-pointer"
+                      >
+                        <RotateCcw className="w-4 h-4 text-amber-600" />
+                        <span>Reset Demo Data</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          setConversionInitialMode('login');
+                          setShowConversionModal(true);
+                        }}
+                        className="w-full px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100 flex items-center gap-2.5 transition-colors text-xs font-semibold text-left cursor-pointer"
+                      >
+                        <User className="w-4 h-4 text-slate-400" />
+                        <span>Sign In with Existing Account</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Sign Out Section */}
                   <div className="p-2 border-t border-slate-100 bg-slate-50/50">
                     <button
@@ -891,7 +941,7 @@ export function Navbar({
                       className="w-full px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition-colors text-xs font-bold text-left cursor-pointer"
                     >
                       <LogOut className="w-4 h-4 text-rose-500" />
-                      <span>Sign Out</span>
+                      <span>{isDemo ? "Exit Demo Session" : "Sign Out"}</span>
                     </button>
                   </div>
                 </motion.div>
@@ -900,6 +950,18 @@ export function Navbar({
           </div>
         </div>
       </header>
+
+      {/* Account Conversion & Reset Modals */}
+      <AccountConversionModal
+        isOpen={showConversionModal}
+        onClose={() => setShowConversionModal(false)}
+        initialMode={conversionInitialMode}
+      />
+
+      <ResetDemoModal
+        isOpen={showResetModal}
+        onClose={() => setShowResetModal(false)}
+      />
 
       {/* Logout Confirmation Modal */}
       <AnimatePresence>
